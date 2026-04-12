@@ -1,0 +1,16 @@
+# Python-Bibliotheken (Der 3-Millionen-Zeilen-Müll)
+venv/
+.venv/
+env/
+bin/
+lib/
+share/
+
+# Lokale Speicher & Caches
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+
+# Private Daten (Sicherheit!)
+.env
+memory.json
