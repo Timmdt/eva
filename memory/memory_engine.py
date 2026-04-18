@@ -1,84 +1,70 @@
 import json
 import os
 import tempfile
-from typing import Callable
 from datetime import datetime, timezone
+from pathlib import Path
+from typing import Callable
 
 import ollama
 
-STATE_PATH = "memory/state.json"
-MEMORY_PATH = "memory/memory.json"
 
-def load_memory(path: str = MEMORY_PATH) -> dict:
+STATE_PATH = Path("memory/state.json")
+MEMORY_PATH = Path("memory/memory.json")
+
+
+def _safe_json_load(path: Path) -> dict:
     try:
-        with open(path, "r", encoding="utf-8") as f:
+        with path.open("r", encoding="utf-8") as f:
             return json.load(f)
-    except FileNotFoundError:
-        return {}
-    except json.JSONDecodeError:
+    except (FileNotFoundError, json.JSONDecodeError):
         return {}
 
-def save_memory(memory: dict, path: str = MEMORY_PATH) -> None:
-    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
-    fd, tmp = tempfile.mkstemp(dir=os.path.dirname(path) or ".", prefix="memory_", suffix=".json")
+
+def _atomic_json_write(data: dict, path: Path, prefix: str, suffix: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp_path = tempfile.mkstemp(dir=str(path.parent), prefix=prefix, suffix=suffix)
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as f:
-            json.dump(memory, f, ensure_ascii=False, indent=4)
-        os.replace(tmp, path)  # atomarer Austausch
+            json.dump(data, f, ensure_ascii=False, indent=4)
+        os.replace(tmp_path, path)
     finally:
-        if os.path.exists(tmp):
-            os.remove(tmp)
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)
 
 
+def load_memory(path: str | Path = MEMORY_PATH) -> dict:
+    return _safe_json_load(Path(path))
 
-def load_state(path: str = STATE_PATH) -> dict:
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except FileNotFoundError:
-        return {}
-    except json.JSONDecodeError:
-        return {}
 
-def save_state(state: dict, path: str = STATE_PATH) -> None:
-    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
-    fd, tmp = tempfile.mkstemp(dir=os.path.dirname(path) or ".", prefix="state_", suffix=".json")
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
-            json.dump(state, f, ensure_ascii=False, indent=4)
-        os.replace(tmp, path)  # atomarer Austausch
-    finally:
-        if os.path.exists(tmp):
-            os.remove(tmp)
+def save_memory(memory: dict, path: str | Path = MEMORY_PATH) -> None:
+    _atomic_json_write(memory, Path(path), "memory_", ".json")
 
-def delete_state_history(path: str = STATE_PATH) -> None:
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            state = json.load(f)
-        state.pop("history", None)
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(state, f, ensure_ascii=False, indent=4)
-    except FileNotFoundError:
-        pass
-    except json.JSONDecodeError:
-        pass
 
-def modify_state(modifier: Callable[[dict], dict], path: str = STATE_PATH) -> dict:
+def load_state(path: str | Path = STATE_PATH) -> dict:
+    return _safe_json_load(Path(path))
+
+
+def save_state(state: dict, path: str | Path = STATE_PATH) -> None:
+    _atomic_json_write(state, Path(path), "state_", ".json")
+
+
+def delete_state_history(path: str | Path = STATE_PATH) -> None:
+    state = load_state(path)
+    if state.pop("history", None) is not None:
+        save_state(state, path)
+
+
+def modify_state(modifier: Callable[[dict], dict], path: str | Path = STATE_PATH) -> dict:
     state = load_state(path)
     new_state = modifier(state) or state
     save_state(new_state, path)
     return new_state
 
-def reflect(path: str = STATE_PATH) -> dict:
-    try:
-        with open(STATE_PATH, "r", encoding="utf-8") as f:
-            state = json.load(f)
-    except FileNotFoundError:
-        state = {}
 
-
-    bond_level = state.get('bond_level', 'unbekannt')
-    current_emotion = state.get('current_emotion', 'unbekannt')
+def reflect(path: str | Path = STATE_PATH) -> str:
+    state = load_state(path)
+    bond_level = state.get("bond_level", "unbekannt")
+    current_emotion = state.get("current_emotion", "unbekannt")
 
     system_prompt = f"""
         Du bist das Reflexions-Modul von EVA. Deine Aufgabe ist es, die folgende Konversation zusammenzufassen.
@@ -91,67 +77,48 @@ def reflect(path: str = STATE_PATH) -> dict:
         - Konversationshistorie: {state.get('history', [])}
         """
 
-    history = [m for m in (state.get("history", []) or []) if m.get("role") == "user"]
-    if history and len(history) > 50:
-        # print(f"--- DEBUG: History (user-only) gekürzt von {len(history)} auf 50 Einträge ---")
+    history = [m for m in (state.get("history") or []) if m.get("role") == "user"]
+    if len(history) > 50:
         history = history[-50:]
-    messages = [{"role": "system", "content": system_prompt}] + history
 
-    # print("--- DEBUG: Messages an Ollama ---")
-    # print(json.dumps(messages, indent=2, ensure_ascii=False))
-    # print("---------------------------------")
+    messages = [{"role": "system", "content": system_prompt}] + history
 
     try:
         response = ollama.chat(
-           
             model="qwen2.5:7b-instruct-q4_K_M",
             messages=messages,
-            options={
-                "temperature": 0.7,
-                "top_p": 0.9,
-            }
+            options={"temperature": 0.7, "top_p": 0.9},
         )
-        answer = response["message"]["content"].strip()
-        # print("--- DEBUG: Antwort von Ollama ---", answer, "---")
-        # print("--- DEBUG: Raw response ---", response)
-        return answer
+        return response["message"]["content"].strip()
     except Exception as e:
         return f"Systemfehler im kognitiven Kern: {e}"
-
-    
 
 
 def ai_modifier(state: dict) -> dict:
     state.setdefault("bond_level", 0.2)
     state["bond_level"] = min(1.0, state["bond_level"] + 0.01)
-    state.setdefault("history", [])
-    if len(state["history"]) > 20:
-        state["history"].pop(0)
+    history = state.setdefault("history", [])
+    if len(history) > 20:
+        del history[:-20]
     return state
 
 
-def run_reflection_and_save():
-
+def run_reflection_and_save() -> None:
     reflection_text = reflect()
-
-    # Verbesserung: Nicht speichern, wenn die Reflexion fehlschlägt.
     if not reflection_text or reflection_text.startswith("Systemfehler"):
         print("Reflexion fehlgeschlagen oder wurde übersprungen.")
         return
 
     memory_data = load_memory()
     timestamp = datetime.now(timezone.utc).isoformat()
-
-    # Die Reflexion als Objekt mit Zeitstempel speichern
-    reflection_entry = {
-        "timestamp": timestamp,
-        "summary": reflection_text
-    }
-
-    if "reflections" not in memory_data:
-        memory_data["reflections"] = []
-    memory_data["reflections"].append(reflection_entry)
-
+    state = load_state()
+    memory_data.setdefault("reflections", []).append(
+        {
+            "timestamp": timestamp,
+            "bond_level": state.get("bond_level", "unbekannt"),
+            "summary": reflection_text,
+        }
+    )
     save_memory(memory_data)
     delete_state_history()
     print("Reflexion wurde erfolgreich gespeichert.")
