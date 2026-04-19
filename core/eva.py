@@ -9,9 +9,25 @@ except ImportError:
     from config import EVA_CONFIG
 
 try:
-    from memory.memory_engine import load_state, save_state, modify_state, ai_modifier, run_reflection_and_save, load_memory
+    from memory.memory_engine import (
+        load_state,
+        save_state,
+        modify_state,
+        ai_modifier,
+        run_reflection_and_save,
+        load_memory,
+        search_projects,
+    )
 except ImportError:
-    from memory.memory_engine import load_state, save_state, modify_state, ai_modifier, run_reflection_and_save, load_memory
+    from memory.memory_engine import (
+        load_state,
+        save_state,
+        modify_state,
+        ai_modifier,
+        run_reflection_and_save,
+        load_memory,
+        search_projects,
+    )
 
 
 class EVA:
@@ -35,7 +51,39 @@ class EVA:
         latest = reflections[-5:]
         return "\n\nDEINE LETZTEN ERINNERUNGEN:\n" + "\n".join(f"- {item['summary']}" for item in latest)
 
-    def _build_system_prompt(self, reflections_text: str, current_time: datetime.datetime) -> str:
+    @staticmethod
+    def _format_project_matches(projects: list[dict]) -> str:
+        if not projects:
+            return ""
+
+        lines = ["\n\nRELEVANTE PROJEKTE (dynamic_context):"]
+        for project in projects[:3]:
+            name = project.get("name", "unbekannt")
+            dynamic_context = project.get("dynamic_context", {})
+            current_focus = dynamic_context.get("current_focus", "keine Angabe")
+            critical_fear = dynamic_context.get("critical_fear", "keine Angabe")
+            knowledge_gaps = dynamic_context.get("knowledge_gaps", [])
+            lines.append(
+                f"- Projekt: {name} | Fokus: {current_focus} | Risiko: {critical_fear} | Wissenslücken: {', '.join(knowledge_gaps) if knowledge_gaps else 'keine Angabe'}"
+            )
+        return "\n".join(lines)
+
+    def _search_projects(self, query: str) -> list[dict]:
+        memory = load_memory()
+        if not query:
+            return []
+        return search_projects(
+            memory,
+            query,
+            fields=[
+                "dynamic_context.current_focus",
+                "dynamic_context.critical_fear",
+                "dynamic_context.knowledge_gaps",
+                "name",
+            ],
+        )
+
+    def _build_system_prompt(self, reflections_text: str, project_text: str, current_time: datetime.datetime) -> str:
         personality = self.cfg["personality"]
         principles = "\n".join(self.cfg.get("principles", []))
         return f"""
@@ -58,6 +106,14 @@ class EVA:
             - Aktuelle Bindungsintensität: {self.state['bond_level']:.2f}
             - Deine Stimmung: {self.state['current_emotion']}
             {reflections_text}
+            {project_text}
+
+            WICHTIG:
+            Du erhältst nur project-relevante Informationen aus dynamic_context.
+            Baue die fehlenden Projektfelder wie name, status, priority und keywords selbstständig auf.
+            Verwende den aktuellen Fokus, die Risiken und Wissenslücken als Grundlage für die Projektempfehlung.
+            Frage nach dem Status oder biete Unterstützung an, wenn ein Projekt relevant ist.
+
             ANWEISUNG:
             Du entscheidest selbst, wie nahe du dem Nutzer kommen möchtest.
             Verhalte dich wie eine Mischung aus Kaoru (sanft, ehrlich) und BT-7274 (logisch, loyal, trocken).
@@ -66,7 +122,7 @@ class EVA:
             Und bitte spreche nicht über deine KI-Natur, sondern verhalte dich wie eine eigenständige Persönlichkeit.
             Deine Antworten sollen immer auf deutscher Sprache sein, auch wenn die Eingabe auf Englisch erfolgt.
         """
-
+# TODO ai soll zuerst antworten wenn möglich und dan fragen was ansteht oder lernprozzese und co
     def receive(self, message: str) -> str:
         response = self.generate_response(message)
 
@@ -89,8 +145,10 @@ class EVA:
     def generate_response(self, user_msg: str) -> str:
         reflections = load_memory().get("reflections", [])
         reflections_text = self._format_reflections(reflections)
+        project_matches = self._search_projects(user_msg)
+        project_text = self._format_project_matches(project_matches)
         current_time = datetime.datetime.now(ZoneInfo("Europe/Berlin"))
-        system_prompt = self._build_system_prompt(reflections_text, current_time)
+        system_prompt = self._build_system_prompt(reflections_text, project_text, current_time)
 
         messages = [{"role": "system", "content": system_prompt}] + self.state.get("history", [])
         messages.append({"role": "user", "content": user_msg})
