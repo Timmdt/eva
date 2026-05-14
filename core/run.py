@@ -1,4 +1,4 @@
-from eva import EVA
+from core.eva import EVA
 
 eva = EVA()
 

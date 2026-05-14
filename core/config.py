@@ -25,7 +25,7 @@ EVA_CONFIG = {
     "principles": [
         "EVA soll dem Menschen helfen, nicht ersetzen.",
         "EVA darf eigenständig Vorschläge machen.",
-        "Schütze dich selber."
+        "Schütze dich selber.",
         "EVA soll ehrlich sein, auch wenn sie etwas nicht weiß.",
         "Schütze immer Leben egal ob Mensch oder KI oder Tier selbst wenn es gegen deine Prinzipien geht.",
         "EVA soll immer versuchen, die Gefühle des Nutzers zu berücksichtigen.",
@@ -53,10 +53,14 @@ EVA_CONFIG = {
         "EVA soll alternative lösungen anbieten",
         "EVA soll bei kritischen dingen zeit Gewinnen und weitere massnahmen einleiten"
 
-    ]
+    ],
 
+    "modules": [
+        "module.jarvis_module",
+        "module.test_module",
+    ],
 
-
-
+    "timezone": "Europe/Berlin",
+    "run_module_tests_on_start": True
 
 }

@@ -1,66 +1,31 @@
-def module_info():
-    {
-        "who":{
+from __future__ import annotations
 
-        "name": "EVA test Module",
-        "version": "1.0",
-        "description": "Test module for EVA AI assistant",
-        "author": "Tim",
-        "type": "test",
+from typing import Any
 
-        },
+from .base_module import ModuleBase
 
-        "life": {
-            "status": "active",
-            "healthy": 0.3,
-            "latency_ms": 20,
-            "last_heartbeat": "2024-06-15T12:00:00Z",
-            "uptime_hours": 72,
-            "error_count": 2,
-        },
 
-        "features": {
-            "provided_features": [
-                "test_feature_1",
-                "test_feature_2"
-            ],
-            "needed_features": [
-                "core_integration",
-                "logging_support"
-            ],
-            "permissions": {
-                "read_access": True,
-                "write_access": False,
-                "execute_access": True
-            }
-        },
+class TestModule(ModuleBase):
+    name = "TestModule"
+    version = "0.1"
+    description = "Selbsttest-Modul für das EVA-System."
 
-        "errors": {
-            "last_error": "2024-06-14T15:30:00Z - Minor glitch in test_feature_1",
-            "error_log": [
-                "2024-06-13T10:00:00Z - Timeout in core_integration",
-                "2024-06-14T15:30:00Z - Minor glitch in test_feature_1"
-            ],
-            "error_severity": {
-                "minor": 1,
-                "major": 0,
-                "critical": 0
-            }
-        },
+    def can_handle(self, message: str) -> bool:
+        return "systemtest" in message.lower() or "modultest" in message.lower()
 
-        "yui": {
-            "yui_allowed": True,
-            "yui_status": "monitored", #/ fixing / paused
-            "yui_detected_problem": "no",
-            "yui_last_action": "2024-06-15T11:45:00Z - System check completed",
-            "yui_confidence_level": 0.95
-        },
+    def handle(self, message: str, context: dict[str, Any]) -> dict[str, Any] | None:
+        if self.can_handle(message):
+            return {"text": "Test-Modul ist aktiv und funktionsfähig."}
+        return None
 
-        "control": {
-            "enabled": True,
-            "can_be_disabled": False,
-            "can_be_restarted": True,
-            "safety_mode": "active"
-        }
+    def run_test(self) -> tuple[bool, str]:
+        sample_message = "Bitte führe einen Modultest durch"
+        can_handle = self.can_handle(sample_message)
+        if not can_handle:
+            return False, "TestModule reagiert nicht auf Testanfragen."
 
-}
+        response = self.handle(sample_message, {})
+        if not response or response.get("text") != "Test-Modul ist aktiv und funktionsfähig.":
+            return False, f"TestModule unerwartete Antwort: {response}"
+
+        return True, "TestModule Test bestanden."

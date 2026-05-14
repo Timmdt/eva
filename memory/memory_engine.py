@@ -5,8 +5,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
-import ollama
-
+try:
+    import ollama
+except ImportError:
+    ollama = None
 
 STATE_PATH = Path("memory/state.json")
 MEMORY_PATH = Path("memory/memory.json")
@@ -98,6 +100,123 @@ def _project_sort_key(project: dict) -> tuple[int, float]:
     return (priority, timestamp)
 
 
+def _extract_learning_items(history: list[dict]) -> list[str]:
+    keywords = ["lernen", "lernen will", "möchte lernen", "will lernen", "ich will", "ich möchte", "ziel", "projekt", "interesse"]
+    items: list[str] = []
+    for entry in history:
+        if entry.get("role") != "user":
+            continue
+        text = entry.get("content", "")
+        lower = text.lower()
+        if any(keyword in lower for keyword in keywords):
+            sentences = [s.strip() for s in text.replace("?", ".").replace("!", ".").split(".") if s.strip()]
+            for sentence in sentences:
+                if any(keyword in sentence.lower() for keyword in keywords) and len(sentence) > 10:
+                    if sentence not in items:
+                        items.append(sentence)
+    return items
+
+
+def _extract_important_points(history: list[dict]) -> list[str]:
+    items: list[str] = []
+    for entry in history:
+        if entry.get("role") != "user":
+            continue
+        text = entry.get("content", "")
+        lower = text.lower()
+        if "wichtig" in lower or "sehr wichtig" in lower or "dringend" in lower:
+            sentences = [s.strip() for s in text.replace("?", ".").replace("!", ".").split(".") if s.strip()]
+            for sentence in sentences:
+                if "wichtig" in sentence.lower() or "dringend" in sentence.lower():
+                    if sentence not in items:
+                        items.append(sentence)
+    return items
+
+
+def save_chat_history(state: dict, path: str | Path = MEMORY_PATH) -> None:
+    memory_data = load_memory(path)
+    history = state.get("history", [])
+    if not history:
+        return
+
+    timestamp = datetime.now(timezone.utc).isoformat()
+    memory_data.setdefault("chat_logs", []).append(
+        {
+            "timestamp": timestamp,
+            "history": history,
+        }
+    )
+
+    learning_items = _extract_learning_items(history)
+    important_points = _extract_important_points(history)
+
+    if learning_items:
+        memory_data.setdefault("learning_goals", [])
+        for item in learning_items:
+            if item not in memory_data["learning_goals"]:
+                memory_data["learning_goals"].append(item)
+
+    if important_points:
+        memory_data.setdefault("important_points", [])
+        for item in important_points:
+            if item not in memory_data["important_points"]:
+                memory_data["important_points"].append(item)
+
+    save_memory(memory_data, path)
+
+
+def _find_json_object(text: str) -> str | None:
+    start = text.find("{")
+    if start == -1:
+        return None
+
+    depth = 0
+    in_string = False
+    escape = False
+    for idx in range(start, len(text)):
+        char = text[idx]
+        if char == "\"" and not escape:
+            in_string = not in_string
+        elif char == "\\" and not escape:
+            escape = True
+            continue
+        elif char == "{" and not in_string:
+            depth += 1
+        elif char == "}" and not in_string:
+            depth -= 1
+            if depth == 0:
+                return text[start : idx + 1]
+        escape = False
+    return None
+
+
+def _parse_project_result(raw: str) -> dict | None:
+    json_text = _find_json_object(raw)
+    if not json_text:
+        return None
+    try:
+        return json.loads(json_text)
+    except json.JSONDecodeError:
+        return None
+
+
+def _store_project_result(project: dict, path: str | Path = MEMORY_PATH) -> None:
+    if not project or not isinstance(project, dict):
+        return
+
+    memory_data = load_memory(path)
+    memory_data.setdefault("projects", [])
+
+    project_name = project.get("name")
+    if project_name:
+        memory_data["projects"] = [
+            item for item in memory_data["projects"] if item.get("name") != project_name
+        ]
+
+    memory_data["projects"].append(project)
+    save_memory(memory_data, path)
+
+
 def search_projects(memory: dict, query: str, fields: list[str] | None = None) -> list[dict]:
     """Suche Projekte in memory.json nach name, keywords oder Kontext."""
     projects = memory.get("projects", [])
@@ -155,11 +274,14 @@ def reflect(path: str | Path = STATE_PATH) -> str:
 
     messages = [{"role": "system", "content": system_prompt}] + history
 
+    if ollama is None:
+        return "Ollama ist nicht installiert. Reflexion ist zurzeit nicht verfügbar."
+
     try:
         response = ollama.chat(
-            model="qwen2.5:7b-instruct-q4_K_M",
+            model="mistral-nemo:12b-instruct-2407-q4_K_S",
             messages=messages,
-            options={"temperature": 0.7, "top_p": 0.9},
+            options={"temperature": 0.2, "top_p": 0.9},
         )
         return response["message"]["content"].strip()
     except Exception as e:
@@ -168,17 +290,20 @@ def reflect(path: str | Path = STATE_PATH) -> str:
 
 def project_entry(path: str | Path = STATE_PATH) -> str:
     state = load_state(path)
-    system_prompt = f"""
-        Du bist das Projekt-Logbuch von EVA. Deine Aufgabe ist es, aus dem vorhandenen dynamic_context ein vollständiges Projektobjekt zu erzeugen.
-        Du bekommst nur dynamic_context als verlässliche Projektinformation. Erstelle daraus zusätzlich sinnvoll:
+    system_prompt = """
+        Du bist das Projekt-Logbuch von EVA. Deine Aufgabe ist es, aus der vorliegenden Konversation ein Projektobjekt zu erzeugen, wenn ein langfristiges Ziel, ein wichtiges Lernvorhaben oder ein klares Projekt erkennbar ist.
+        Du kannst vorhandenen dynamic_context nutzen, falls er im Speicher existiert. Wenn dynamic_context nicht vorhanden ist, arbeite allein mit der Gesprächshistorie.
+        Erstelle sinnvoll:
         - name: ein kurzer Projekt-Titel
         - status: der aktuelle Status (z.B. "in progress", "abgeschlossen", "geplant")
         - priority: Priorität des Projekts (z.B. "hoch", "mittel", "niedrig")
         - keywords: wichtige Stichwörter zum Projekt
         - dynamic_context: die vorhandenen Kontextdaten
 
-        Verwende den dynamic_context als Ausgangspunkt und ergänze fehlende Projektfelder selbst.
-        Gib das Ergebnis als gültiges JSON-Objekt zurück.
+        Wenn der Nutzer ein wichtiges, langfristiges Ziel beschreibt, z.B. "ich lerne aktuell eine neue Sprache" und es ist ihm sehr wichtig, dann erzeuge ein Projekt.
+        Wenn keine ausreichenden Informationen vorliegen oder die Unterhaltung nur eine einmalige, kurzzeitige Frage enthält, antworte stattdessen mit: {"created": false}
+        Ergänze fehlende Projektfelder nur, wenn genügend Daten vorhanden sind.
+        Gib das Ergebnis als gültiges JSON-Objekt zurück. Antworte nicht mit zusätzlichem Text außerhalb des JSON.
         """
     
     # TODO time stamps müssen unten gebaut werden um die richtige zeit zu erfassen
@@ -188,11 +313,14 @@ def project_entry(path: str | Path = STATE_PATH) -> str:
         history = history[-50:]
     messages = [{"role": "system", "content": system_prompt}] + history
 
+    if ollama is None:
+        return "Ollama ist nicht installiert. Projekt-Entry ist zurzeit nicht verfügbar."
+
     try:
         response = ollama.chat(
-            model="qwen2.5:7b-instruct-q4_K_M",
+            model="mistral-nemo:12b-instruct-2407-q4_K_S",
             messages=messages,
-            options={"temperature": 0.7, "top_p": 0.9},
+            options={"temperature": 0.2, "top_p": 0.9},
         )
         return response["message"]["content"].strip()
     except Exception as e:
@@ -208,24 +336,40 @@ def ai_modifier(state: dict) -> dict:
 
 
 def run_reflection_and_save() -> None:
-    reflection_text = reflect()
-    if not reflection_text or reflection_text.startswith("Systemfehler"):
-        print("Reflexion fehlgeschlagen oder wurde übersprungen.")
-        return
+    state = load_state()
+    save_chat_history(state)
 
+    reflection_text = reflect()
     memory_data = load_memory()
     timestamp = datetime.now(timezone.utc).isoformat()
-    state = load_state()
-    memory_data.setdefault("reflections", []).append(
-        {
-            "timestamp": timestamp,
-            "bond_level": state.get("bond_level", "unbekannt"),
-            "summary": reflection_text,
-        }
-    )
-    save_memory(memory_data)
 
-    print(project_entry())
+    if reflection_text and not reflection_text.startswith("Systemfehler"):
+        memory_data.setdefault("reflections", []).append(
+            {
+                "timestamp": timestamp,
+                "bond_level": state.get("bond_level", "unbekannt"),
+                "summary": reflection_text,
+            }
+        )
+        save_memory(memory_data)
+    else:
+        print("Reflexion fehlgeschlagen oder wurde übersprungen.")
+
+    project_result = project_entry()
+    if project_result:
+        memory_data = load_memory()
+        memory_data.setdefault("project_entries", []).append(
+            {
+                "timestamp": timestamp,
+                "project_entry": project_result,
+            }
+        )
+        save_memory(memory_data)
+
+        parsed_project = _parse_project_result(project_result)
+        if parsed_project and parsed_project.get("created") is not False:
+            _store_project_result(parsed_project)
+
     delete_state_history()
     print("Reflexion wurde erfolgreich gespeichert.")
 
