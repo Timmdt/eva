@@ -56,6 +56,7 @@ EVA_CONFIG = {
     ],
 
     "modules": [
+        "module.startup_module",
         "module.jarvis_module",
         "module.test_module",
     ],

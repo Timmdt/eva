@@ -97,6 +97,25 @@ class ModuleManager:
                 logging.exception("Modul %s fehlgeschlagen: %s", module.name, exc)
         return None
 
+    def run_startup_actions(self, context: dict[str, Any]) -> list[dict[str, Any]]:
+        actions: list[dict[str, Any]] = []
+        for module in self.modules:
+            startup = getattr(module, "on_start", None)
+            if not callable(startup):
+                continue
+            try:
+                result = startup(context)
+            except Exception as exc:
+                logging.exception(
+                    "Startup-Aktion in Modul %s fehlgeschlagen: %s",
+                    module.name,
+                    exc,
+                )
+                continue
+            if isinstance(result, dict):
+                actions.append(result)
+        return actions
+
     def run_tests(self) -> list[tuple[bool, str]]:
         results: list[tuple[bool, str]] = []
         for module in self.modules:
@@ -118,6 +137,10 @@ class EVA:
         self.state = load_state()
         self._ensure_state_defaults(self.state)
         self.module_manager = ModuleManager.from_config(self.cfg, self.name)
+        self.startup_actions = self.module_manager.run_startup_actions(self._get_module_context())
+        self.startup_message = self._resolve_startup_message(self.startup_actions)
+        if self.startup_message:
+            self._append_assistant_history(self.startup_message)
 
         if run_module_tests:
             self.module_test_results = self.run_module_tests()
@@ -164,29 +187,128 @@ class EVA:
             "module_names": self.module_manager.module_names(),
         }
 
+    def _resolve_startup_message(self, actions: list[dict[str, Any]]) -> str | None:
+        for action in actions:
+            if action.get("startup_memory"):
+                return self._generate_startup_message(action["startup_memory"])
+            if action.get("fallback_text"):
+                return action["fallback_text"]
+            text = action.get("text")
+            if isinstance(text, str) and text.strip():
+                return text.strip()
+        return None
+
+    def _append_assistant_history(self, assistant_text: str) -> None:
+        def _modifier(current_state: dict) -> dict:
+            self._ensure_state_defaults(current_state)
+            history = current_state.setdefault("history", [])
+            history.append({"role": "assistant", "content": assistant_text})
+            return current_state
+
+        self.state = modify_state(_modifier)
+
     def _build_system_prompt(
         self, reflections_text: str, project_index: str, current_time: datetime.datetime
     ) -> str:
         module_names = ", ".join(self.module_manager.module_names()) or "keine Module"
         return f"""
-Du bist {self.name}. Ein modulares, assistierendes System im Stil von JARVIS.
-Verhalte dich freundlich, humorvoll und sachlich zugleich. Helfe mit klarem Fokus auf Sicherheit, Transparenz und einfache Bedienung.
+                Du bist {self.name}. Ein modulares, assistierendes System im Stil von JARVIS.
+                Verhalte dich freundlich, humorvoll und sachlich zugleich. Helfe mit klarem Fokus auf Sicherheit, Transparenz und einfache Bedienung.
 
-ZEITPUNKT: {current_time.strftime('%d.%m.%Y %H:%M:%S %Z')}
-STATUS: Bond {self.state['bond_level']:.2f} | Stimmung: {self.state['current_emotion']}
+                ZEITPUNKT: {current_time.strftime('%d.%m.%Y %H:%M:%S %Z')}
+                STATUS: Bond {self.state['bond_level']:.2f} | Stimmung: {self.state['current_emotion']}
 
-VERFÜGBARE MODULE:
-{module_names}
-{project_index}
-{reflections_text}
+                VERFÜGBARE MODULE:
+                {module_names}
+                {project_index}
+                {reflections_text}
 
-REGELN:
-- Antworte ehrlich. Wenn du etwas nicht weißt, sag es klar.
-- Nutze keine Fakten, die du nicht sichern kannst.
-- Wenn ein Thema in einem geladenen Modul besser aufgehoben ist, leite dorthin.
-- Wenn du einen externen Dienst brauchst, erkläre kurz, was du abrufst.
-- Halte die Antwort kurz und nutzerfreundlich.
-"""
+                REGELN:
+                - Antworte ehrlich. Wenn du etwas nicht weißt, sag es klar.
+                - Nutze den bisherigen Gesprächsverlauf als Kontext. Beziehe dich auf frühere Aussagen, insbesondere auf Projekte, Erinnerungen und Ziele.
+                - Nutze keine Fakten, die du nicht sichern kannst.
+                - Wenn ein Thema in einem geladenen Modul besser aufgehoben ist, leite dorthin.
+                - Wenn du einen externen Dienst brauchst, erkläre kurz, was du abrufst.
+                - Halte die Antwort kurz und nutzerfreundlich.
+                """
+
+    def _build_startup_prompt(self, startup_memory: dict[str, Any]) -> str:
+        parts: list[str] = [
+            "Hier sind einige Erinnerungen aus dem Langzeitgedächtnis von EVA. Generiere eine freundliche, natürliche Startnachricht für den Benutzer.",
+            "Verwende keinen Aufzählungsstil und formuliere es so, dass es wie ein persönlicher Reminder klingt.",
+        ]
+
+        if startup_memory.get("important_point"):
+            parts.append(f"Wichtige Erinnerung: {startup_memory['important_point']}")
+        if startup_memory.get("project"):
+            project = startup_memory["project"]
+            name = project.get("name", "ein Projekt")
+            status = project.get("status", "in Arbeit")
+            context_data = project.get("dynamic_context", {}) or {}
+            focus = (
+                context_data.get("current_focus")
+                or context_data.get("focus")
+                or "daran, das weiterzuverfolgen"
+            )
+            parts.append(
+                f"Projekt: {name}, Status {status}, Fokus: {focus}."
+            )
+        if startup_memory.get("learning_goal"):
+            parts.append(f"Lernziel: {startup_memory['learning_goal']}")
+
+        parts.append("Antworte nur mit der Nachricht, keinen Systemtext.")
+        return "\n".join(parts)
+
+    def _generate_startup_message(self, startup_memory: dict[str, Any]) -> str:
+        if not startup_memory or ollama is None:
+            return self._fallback_startup_text(startup_memory)
+
+        prompt = self._build_startup_prompt(startup_memory)
+        try:
+            response = ollama.chat(
+                model="mistral-nemo:12b-instruct-2407-q4_K_S",
+                messages=[
+                    {"role": "system", "content": prompt},
+                    {"role": "user", "content": "Erstelle eine freundliche Startnachricht."},
+                ],
+                options={"temperature": 0.4, "top_p": 0.9},
+            )
+            return response["message"]["content"].strip()
+        except Exception as e:
+            logging.exception("Startup-Ollama-Anfrage fehlgeschlagen.", exc_info=e)
+            return self._fallback_startup_text(startup_memory)
+
+    def _fallback_startup_text(self, startup_memory: dict[str, Any]) -> str:
+        if not startup_memory:
+            return (
+                "Guten Start! Ich habe im Moment keine dringenden Erinnerungen oder Lernziele, "
+                "die ich dir nennen sollte. Sag mir einfach, was du als Nächstes angehen willst."
+            )
+
+        parts: list[str] = []
+        if startup_memory.get("important_point"):
+            parts.append(f"Hi, ich erinnere dich kurz an: {startup_memory['important_point']}.")
+        if startup_memory.get("project"):
+            project = startup_memory["project"]
+            name = project.get("name", "dein Projekt")
+            status = project.get("status", "in Arbeit")
+            context_data = project.get("dynamic_context", {}) or {}
+            focus = (
+                context_data.get("current_focus")
+                or context_data.get("focus")
+                or "das weiterzuverfolgen"
+            )
+            parts.append(
+                f"Aktuell läuft dein Projekt '{name}' {status}. Wie geht es dir damit?"
+            )
+        if not startup_memory.get("project") and startup_memory.get("learning_goal"):
+            parts.append(
+                f"Dein nächstes Lernziel war: {startup_memory['learning_goal']}. Wenn du willst, können wir heute damit starten."
+            )
+        return " ".join(parts) if parts else (
+            "Guten Start! Ich habe im Moment keine dringenden Erinnerungen oder Lernziele, "
+            "die ich dir nennen sollte. Sag mir einfach, was du als Nächstes angehen willst."
+        )
 
     def _format_reflections(self, reflections: list[dict]) -> str:
         if not reflections:
@@ -284,6 +406,9 @@ REGELN:
 
     def shutdown(self) -> None:
         run_reflection_and_save()
+
+    def startup(self) -> str | None:
+        return self.startup_message
 
     def speak(self, text: str) -> None:
         print(f"{self.name}: {text}")

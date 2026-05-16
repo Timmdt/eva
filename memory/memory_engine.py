@@ -10,8 +10,9 @@ try:
 except ImportError:
     ollama = None
 
-STATE_PATH = Path("memory/state.json")
-MEMORY_PATH = Path("memory/memory.json")
+ROOT_PATH = Path(__file__).resolve().parent.parent
+STATE_PATH = ROOT_PATH / "memory" / "state.json"
+MEMORY_PATH = ROOT_PATH / "memory" / "memory.json"
 
 
 def _safe_json_load(path: Path) -> dict:
@@ -200,6 +201,17 @@ def _parse_project_result(raw: str) -> dict | None:
         return None
 
 
+def _project_history_candidates(history: list[dict]) -> list[dict]:
+    candidates: list[dict] = []
+    for entry in history:
+        if entry.get("role") not in {"user", "assistant"}:
+            continue
+        if not isinstance(entry.get("content"), str):
+            continue
+        candidates.append(entry)
+    return candidates[-50:]
+
+
 def _store_project_result(project: dict, path: str | Path = MEMORY_PATH) -> None:
     if not project or not isinstance(project, dict):
         return
@@ -288,11 +300,12 @@ def reflect(path: str | Path = STATE_PATH) -> str:
         return f"Systemfehler im reflect Kern: {e}"
 
 
-def project_entry(path: str | Path = STATE_PATH) -> str:
+def project_entry(path: str | Path = STATE_PATH) -> dict:
     state = load_state(path)
     system_prompt = """
         Du bist das Projekt-Logbuch von EVA. Deine Aufgabe ist es, aus der vorliegenden Konversation ein Projektobjekt zu erzeugen, wenn ein langfristiges Ziel, ein wichtiges Lernvorhaben oder ein klares Projekt erkennbar ist.
-        Du kannst vorhandenen dynamic_context nutzen, falls er im Speicher existiert. Wenn dynamic_context nicht vorhanden ist, arbeite allein mit der Gesprächshistorie.
+        Du kannst vorhandenen dynamic_context nutzen, falls er im Speicher existiert. Wenn dynamic_context nicht vorhanden ist, arbeite allein mit der vollständigen Gesprächshistorie.
+        Verwende keine festen Schlüsselwortlisten. Analysiere stattdessen den Kontext und finde projektbezogene Informationen, selbst wenn sie nicht explizit als "Projekt" bezeichnet sind.
         Erstelle sinnvoll:
         - name: ein kurzer Projekt-Titel
         - status: der aktuelle Status (z.B. "in progress", "abgeschlossen", "geplant")
@@ -300,21 +313,18 @@ def project_entry(path: str | Path = STATE_PATH) -> str:
         - keywords: wichtige Stichwörter zum Projekt
         - dynamic_context: die vorhandenen Kontextdaten
 
-        Wenn der Nutzer ein wichtiges, langfristiges Ziel beschreibt, z.B. "ich lerne aktuell eine neue Sprache" und es ist ihm sehr wichtig, dann erzeuge ein Projekt.
-        Wenn keine ausreichenden Informationen vorliegen oder die Unterhaltung nur eine einmalige, kurzzeitige Frage enthält, antworte stattdessen mit: {"created": false}
-        Ergänze fehlende Projektfelder nur, wenn genügend Daten vorhanden sind.
-        Gib das Ergebnis als gültiges JSON-Objekt zurück. Antworte nicht mit zusätzlichem Text außerhalb des JSON.
+        Wenn keine ausreichenden Informationen vorliegen oder die aktuellen Nachrichten keinen Projektbezug haben, antworte exakt mit: {"created": false}
+        Gib nur reines JSON zurück. Verwende keine Codeblöcke, keine Erklärung und keine zusätzlichen Textteile.
         """
     
-    # TODO time stamps müssen unten gebaut werden um die richtige zeit zu erfassen
-    
-    history = [m for m in (state.get("history") or []) if m.get("role") == "user"]
-    if len(history) > 50:
-        history = history[-50:]
+    history = _project_history_candidates(state.get("history") or [])
+    if not history:
+        return {"created": False}
+
     messages = [{"role": "system", "content": system_prompt}] + history
 
     if ollama is None:
-        return "Ollama ist nicht installiert. Projekt-Entry ist zurzeit nicht verfügbar."
+        return {"created": False}
 
     try:
         response = ollama.chat(
@@ -322,9 +332,12 @@ def project_entry(path: str | Path = STATE_PATH) -> str:
             messages=messages,
             options={"temperature": 0.2, "top_p": 0.9},
         )
-        return response["message"]["content"].strip()
-    except Exception as e:
-        return f"Systemfehler im project_entry Kern: {e}"
+        parsed = _parse_project_result(response["message"]["content"].strip())
+        if not parsed:
+            return {"created": False}
+        return parsed
+    except Exception:
+        return {"created": False}
 
 def ai_modifier(state: dict) -> dict:
     state.setdefault("bond_level", 0.2)
@@ -366,11 +379,9 @@ def run_reflection_and_save() -> None:
         )
         save_memory(memory_data)
 
-        parsed_project = _parse_project_result(project_result)
-        if parsed_project and parsed_project.get("created") is not False:
-            _store_project_result(parsed_project)
+        if project_result.get("created") is not False:
+            _store_project_result(project_result)
 
-    delete_state_history()
     print("Reflexion wurde erfolgreich gespeichert.")
 
 

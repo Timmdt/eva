@@ -12,6 +12,10 @@ def main() -> None:
     eva = EVA()
     print(f"--- {eva.name} initialisiert ---")
 
+    startup_text = eva.startup()
+    if startup_text:
+        eva.speak(startup_text)
+
     try:
         while True:
             user_input = input("Du: ")
