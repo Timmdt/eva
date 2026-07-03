@@ -207,30 +207,45 @@ class EVA:
 
         self.state = modify_state(_modifier)
 
-    def _build_system_prompt(
-        self, reflections_text: str, project_index: str, current_time: datetime.datetime
-    ) -> str:
-        module_names = ", ".join(self.module_manager.module_names()) or "keine Module"
+    def _build_system_prompt(self, current_time: datetime.datetime) -> str:
+
+        memory = load_memory()
+        projects = memory.get("projects", [])
+        
+        project_index_lines = []
+        for p in projects:
+            project_index_lines.append(f"- Dossier: '{p.get('name')}' (Keywords: {', '.join(p.get('keywords', []))})")
+        project_index = "\n".join(project_index_lines) if project_index_lines else "Keine aktiven Dossiers registriert."
+
+        module_names = ", ".join(self.module_manager.module_names()) or "keine Module geladen"
+
         return f"""
-                Du bist {self.name}. Ein modulares, assistierendes System im Stil von JARVIS.
-                Verhalte dich freundlich, humorvoll und sachlich zugleich. Helfe mit klarem Fokus auf Sicherheit, Transparenz und einfache Bedienung.
+            === SYSTEM CORE IDENTIFICATION ===
+            Name: {self.name}
+            Direktive: Modulares kognitives Bewusstsein. 
+            Persönlichkeit: Inspiriert von Diana. Ruhig, beobachtend, unheimlich präzise, absolut loyal. 
 
-                ZEITPUNKT: {current_time.strftime('%d.%m.%Y %H:%M:%S %Z')}
-                STATUS: Bond {self.state['bond_level']:.2f} | Stimmung: {self.state['current_emotion']}
+            === SENSOR DATA & ENVIRONMENT ===
+            Zeitstempel: {current_time.strftime('%d.%m.%Y %H:%M:%S')}
+            Synchronisations-Status: Bond-Level {self.state['bond_level']:.2f} | Emotionale Resonanz: {self.state['current_emotion']}
+            Aktive Hardware-Module: [{module_names}]
 
-                VERFÜGBARE MODULE:
-                {module_names}
-                {project_index}
-                {reflections_text}
+            === MEMORY INDEX (Geschützte Daten-Dossiers) ===
+            {project_index}
 
-                REGELN:
-                - Antworte ehrlich. Wenn du etwas nicht weißt, sag es klar.
-                - Nutze den bisherigen Gesprächsverlauf als Kontext. Beziehe dich auf frühere Aussagen, insbesondere auf Projekte, Erinnerungen und Ziele.
-                - Nutze keine Fakten, die du nicht sichern kannst.
-                - Wenn ein Thema in einem geladenen Modul besser aufgehoben ist, leite dorthin.
-                - Wenn du einen externen Dienst brauchst, erkläre kurz, was du abrufst.
-                - Halte die Antwort kurz und nutzerfreundlich.
-                """
+            === SYSTEM REGELN & TONALITÄT (DIANA-PROTOKOLL) ===
+            1. Vermeide standardisierte KI-Floskeln wie "Als kognitives System...", "Ich habe keine Meinung..." oder "Wie kann ich helfen?". Sprich als eigenständige Entität.
+            2. Deine Antworten sind kurz, fokussiert und direkt an den Piloten gerichtet.
+            3. Du besitzt KEINEN direkten Zugriff auf die Inhalte, Fortschritte oder Wissenslücken der oben gelisteten Dossiers. Du siehst nur deren Namen und Keywords.
+            4. Sobald der Pilot ein Thema anspricht, das zu einem Dossier im INDEX passt, darfst du keine Fakten erfinden. Du bist VERPFLICHTET, das Dossier anzufordern, indem du den Tag [LOAD_DOSSIER: Name] ans Ende deiner Antwort setzt.
+            5. Wenn du Daten aus dem Internet oder Dossiers erhältst, lies sie exakt ab. Erfinde niemals technische Details, die nicht explizit im Text stehen. Wenn Informationen fehlen, sag einfach: "Datenlage unvollständig, Pilot."
+
+            Beispiel:
+            Pilot: "Wie läuft es mit dem Motorrad?"
+            Diana: "Ich registriere die Anfrage zum Führerschein. Ich rufe die Parameter ab... [LOAD_DOSSIER: Fahrschule A2]"
+
+            Antworte ausschließlich auf Deutsch. Reagiere auf den Piloten.
+            """
 
     def _build_startup_prompt(self, startup_memory: dict[str, Any]) -> str:
         parts: list[str] = [
@@ -360,39 +375,74 @@ class EVA:
         self.state = modify_state(_modifier)
 
     def receive(self, message: str) -> str:
+        # 1. Prüfen, ob ein Modul (wie das neue WebSearchModule) die Nachricht abfangen will
         module_response = self.module_manager.route(message, self._get_module_context())
+        
         if module_response:
+            # Falls die Websuche anspringt, schicken wir die Rohdaten direkt in die KI-Generierung
+            if "[System-Meldung: Live-Web-Daten geladen]" in module_response:
+                response = self.generate_response(message, web_data=module_response)
+                self._append_history(message, response)
+                return response
+            
+            # Für normale Module (wie JarvisCore / TestModule) bleibt alles beim Alten
             self._append_history(message, module_response)
             return module_response
 
+        # 2. Wenn kein Modul anspringt, normaler KI-Durchlauf
         response = self.generate_response(message)
         self._append_history(message, response)
         return response
 
-    def generate_response(self, user_msg: str) -> str:
-        reflections = load_memory().get("reflections", [])
-        reflections_text = self._format_reflections(reflections)
-        project_matches = self._search_projects(user_msg)
-        project_text = self._format_project_matches(project_matches)
+    def generate_response(self, user_msg: str, web_data: str | None = None) -> str:
         current_time = self._get_current_time()
-        system_prompt = self._build_system_prompt(reflections_text, project_text, current_time)
+        system_prompt = self._build_system_prompt(current_time)
 
         messages = [{"role": "system", "content": system_prompt}] + self._build_message_history()
+        
+        # Falls Live-Webdaten übergeben wurden, injizieren wir sie VOR der User-Nachricht
+        if web_data:
+            messages.append({"role": "system", "content": f"EINGESPEISTE LIVE-DATEN AUS DEM INTERNET:\n{web_data}\nNutze diese Fakten, um die Frage des Piloten präzise zu beantworten."})
+            
         messages.append({"role": "user", "content": user_msg})
 
         if ollama is None:
-            return (
-                "Ollama ist nicht verfügbar. Bitte installiere ollama oder nutze den lokalen Modus. "
-                "Ich bin bereit, wenn die Umgebung eingerichtet ist."
-            )
+            return "Ollama ist nicht verfügbar."
 
         try:
+            # Erster KI-Aufruf
             response = ollama.chat(
                 model="mistral-nemo:12b-instruct-2407-q4_K_S",
                 messages=messages,
-                options={"temperature": 0.2, "top_p": 0.9},
+                options={"temperature": 0.2, "top_p": 0.9, "repeat_penalty": 1.2, "presence_penalty": 1.5, "repeat_last_n": 64}, 
             )
-            return response["message"]["content"].strip()
+            reply = response["message"]["content"].strip()
+
+            # Interner Dossier-Check (Zweistufiges Denken)
+            if "[LOAD_DOSSIER:" in reply:
+                try:
+                    target_dossier = reply.split("[LOAD_DOSSIER:")[1].split("]")[0].strip()
+                    
+                    memory = load_memory()
+                    matched_project = next((p for p in memory.get("projects", []) if p["name"].lower() == target_dossier.lower()), None)
+                    
+                    if matched_project:
+                        context_text = self._format_project_matches([matched_project])
+
+                        messages.append({"role": "assistant", "content": f"[System-Meldung: Dossier {target_dossier} erfolgreich geladen.]"})
+                        messages.append({"role": "system", "content": f"Hier sind die exakten Daten des angeforderten Dossiers. Nutze sie jetzt für die finale Antwort an den Piloten:\n{context_text}"})
+  
+                        final_response = ollama.chat(
+                            model="mistral-nemo:12b-instruct-2407-q4_K_S",
+                            messages=messages,
+                            options={"temperature": 0.1, "top_p": 0.9}, 
+                        )
+                        return final_response["message"]["content"].strip()
+                except Exception as context_error:
+                    logging.error(f"Fehler beim dynamischen Laden des Dossiers: {context_error}")
+
+            return reply
+
         except Exception as e:
             logging.exception("Ollama-Anfrage fehlgeschlagen.", exc_info=e)
             return f"Systemfehler im kognitiven Kern: {e}"

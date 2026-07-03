@@ -59,6 +59,7 @@ EVA_CONFIG = {
         "module.startup_module",
         "module.jarvis_module",
         "module.test_module",
+        "module.web_search_module",
     ],
 
     "timezone": "Europe/Berlin",
