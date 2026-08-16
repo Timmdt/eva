@@ -1,4 +1,10 @@
 {
     "editor.defaultFormatter": "ms-python.python",
-    "workbench.colorTheme": "Bearded Theme Black & Amethyst Soft"
+    "workbench.colorTheme": "Bearded Theme Black & Amethyst Soft",
+    "chat.tools.terminal.autoApprove": {
+        "/^cd /home/kati/opt/eva && sh start_eva\\.sh$/": {
+            "approve": true,
+            "matchCommandLine": true
+        }
+    }
 }

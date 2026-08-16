@@ -1,6 +1,13 @@
 #!/usr/bin/env python3
 import sys
+import logging
 from pathlib import Path
+
+# Enable debug logging
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='[%(name)s] %(levelname)s: %(message)s'
+)
 
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT / 'core'))
