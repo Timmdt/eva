@@ -4,6 +4,21 @@ EVA_CONFIG = {
     "name": "EVA",
     "version": "0.1",
 
+    "model": "mistral-nemo:12b-instruct-2407-q4_K_S",
+
+    "controller_model": "qwen2.5:7b-instruct-q4_K_M",
+
+    "search_query_model": "qwen2.5:7b-instruct-q4_K_M",
+
+    "web_search_max_results": 5,
+
+    "web_search_timeout": 10,
+
+    "modules": [
+        "module.jarvis_module",
+        "module.test_module",
+        "module.web_search_module",
+    ],
     # Wie EVA grundsätzlich sein soll
     "personality": {
         "tone": "freundlich, leicht sarkastisch, humorvoll",

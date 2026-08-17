@@ -5,6 +5,8 @@
         "/^cd /home/kati/opt/eva && sh start_eva\\.sh$/": {
             "approve": true,
             "matchCommandLine": true
-        }
+        },
+        "pip": true,
+        "timeout": true
     }
 }
