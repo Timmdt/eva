@@ -12,7 +12,7 @@ logging.basicConfig(
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT / 'core'))
 
-from eva import EVA
+from core.eva import EVA
 
 
 def main() -> None:
