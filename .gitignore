@@ -1,4 +1,3 @@
-# Python-Bibliotheken (Der 3-Millionen-Zeilen-Müll)
 venv/
 .venv/
 env/
@@ -13,4 +12,5 @@ __pycache__/
 
 # Private Daten (Sicherheit!)
 .env
+state.json
 memory.json
