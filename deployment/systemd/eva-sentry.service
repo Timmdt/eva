@@ -1,0 +1,17 @@
+[Unit]
+Description=EVA local Sentry presence service
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=eva
+WorkingDirectory=/opt/eva
+EnvironmentFile=/opt/eva/.env
+ExecStart=/opt/eva/.venv/bin/python -m sentry.run
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

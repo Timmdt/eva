@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import os
 
 import ollama
 
@@ -15,7 +16,7 @@ class SearchQueryLLM:
 
     def __init__(
         self,
-        model: str = "qwen2.5:7b-instruct-q4_K_M",
+        model: str = "qwen2.5:1.5b",
     ) -> None:
         self.model = model
 
@@ -92,6 +93,7 @@ Ausgabe:
                     "repeat_penalty": 1.1,
                 },
                 stream=False,
+                keep_alive=os.getenv("EVA_OLLAMA_KEEP_ALIVE", "30m"),
             )
 
             query = (

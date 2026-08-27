@@ -14,3 +14,5 @@ __pycache__/
 .env
 state.json
 memory.json
+rag_db.json
+data/faces.json

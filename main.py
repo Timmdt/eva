@@ -1,13 +1,20 @@
 #!/usr/bin/env python3
 
 import logging
+import os
 from pathlib import Path
 
-# Debug Logging
+log_level_name = os.getenv("EVA_LOG_LEVEL", "INFO").strip().upper()
+log_level = getattr(logging, log_level_name, logging.INFO)
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=log_level,
     format='[%(name)s] %(levelname)s: %(message)s'
 )
+
+# Bibliotheks-Transportdetails dürfen nicht zwischen EVAs Stream-Chunks landen.
+if os.getenv("EVA_HTTP_DEBUG", "false").lower() not in {"1", "true", "yes", "on"}:
+    for noisy_logger in ("httpcore", "httpx", "urllib3"):
+        logging.getLogger(noisy_logger).setLevel(logging.WARNING)
 
 ROOT = Path(__file__).resolve().parent
 
@@ -16,6 +23,14 @@ from core.eva import EVA
 
 def main() -> None:
     eva = EVA()
+
+    if os.getenv("EVA_HEALTH_ENABLED", "false").lower() in {"1", "true", "yes", "on"}:
+        from interfaces.health_server import start_in_thread
+        start_in_thread(
+            eva,
+            os.getenv("EVA_HEALTH_HOST", "127.0.0.1"),
+            int(os.getenv("EVA_HEALTH_PORT", "8765")),
+        )
 
     print(
         f"--- {eva.name} initialisiert ---"
@@ -49,14 +64,13 @@ def main() -> None:
             if not user_input:
                 continue
 
-            reply = eva.receive(
-                user_input
-            )
-
-            if reply:
-                eva.speak(
-                    reply
-                )
+            print(f"{eva.name}: ", end="", flush=True)
+            wrote = False
+            for chunk in eva.receive_stream(user_input):
+                print(chunk, end="", flush=True)
+                wrote = True
+            if wrote:
+                print()
 
     except KeyboardInterrupt:
 

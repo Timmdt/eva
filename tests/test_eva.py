@@ -43,9 +43,20 @@ class EvaModuleTest(unittest.TestCase):
         startup_text = eva.startup()
         self.assertIsInstance(startup_text, str)
         self.assertTrue(startup_text.strip())
-        self.assertTrue(eva.state.get("history"))
-        self.assertEqual(eva.state["history"][-1]["role"], "assistant")
-        self.assertEqual(eva.state["history"][-1]["content"], startup_text)
+
+    def test_orphan_startup_messages_are_not_sent_to_llm(self):
+        eva = EVA(run_module_tests=False)
+        eva.max_history_messages = 10
+        eva.state["history"] = [
+            {"role": "assistant", "content": "Startup eins"},
+            {"role": "user", "content": "Frage"},
+            {"role": "assistant", "content": "Antwort"},
+            {"role": "assistant", "content": "Startup zwei"},
+        ]
+        self.assertEqual(eva._build_message_history(), [
+            {"role": "user", "content": "Frage"},
+            {"role": "assistant", "content": "Antwort"},
+        ])
 
 
 if __name__ == "__main__":

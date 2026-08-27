@@ -1,14 +1,41 @@
 # core/config.py
 
+import os
+
+
+def _env_bool(name: str, default: bool = False) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _env_int(name: str, default: int) -> int:
+    try:
+        return int(os.getenv(name, str(default)))
+    except ValueError:
+        return default
+
+
+def _env_float(name: str, default: float) -> float:
+    try:
+        return float(os.getenv(name, str(default)))
+    except ValueError:
+        return default
+
 EVA_CONFIG = {
     "name": "EVA",
     "version": "0.1",
 
-    "model": "mistral-nemo:12b-instruct-2407-q4_K_S",
+    "model": os.getenv("EVA_MODEL", "qwen2.5:3b-instruct"),
 
-    "controller_model": "qwen2.5:7b-instruct-q4_K_M",
+    "web_answer_model": os.getenv("EVA_WEB_MODEL", os.getenv("EVA_MODEL", "qwen2.5:3b-instruct")),
 
-    "search_query_model": "qwen2.5:7b-instruct-q4_K_M",
+    "controller_model": os.getenv("EVA_ROUTER_MODEL", "qwen2.5:1.5b"),
+
+    "router_model": os.getenv("EVA_ROUTER_MODEL", "qwen2.5:1.5b"),
+
+    "search_query_model": os.getenv("EVA_SEARCH_MODEL", "qwen2.5:1.5b"),
 
     "web_search_max_results": 5,
 
@@ -77,7 +104,23 @@ EVA_CONFIG = {
         "module.web_search_module",
     ],
 
-    "timezone": "Europe/Berlin",
-    "run_module_tests_on_start": True
+    "timezone": os.getenv("EVA_TIMEZONE", "Europe/Berlin"),
+    "run_module_tests_on_start": _env_bool("EVA_RUN_MODULE_TESTS", True),
+    "max_history_messages": _env_int("EVA_MAX_HISTORY_MESSAGES", 12),
+    "max_context_chars": _env_int("EVA_MAX_CONTEXT_CHARS", 12000),
+    "rag_top_k": _env_int("EVA_RAG_TOP_K", 4),
+    "rag_threshold": _env_float("EVA_RAG_THRESHOLD", 0.45),
+    "rag_backend": os.getenv("EVA_RAG_BACKEND", "postgres"),
+    "rag_database_url": os.getenv("EVA_DATABASE_URL", ""),
+    "rag_embedding_model": os.getenv("EVA_EMBEDDING_MODEL", "nomic-embed-text"),
+    "rag_embedding_dimension": _env_int("EVA_EMBEDDING_DIMENSION", 0),
+    "rag_cache_ttl": _env_float("EVA_RAG_CACHE_TTL", 60.0),
+    "rag_cache_size": _env_int("EVA_RAG_CACHE_SIZE", 256),
+    "rag_pool_min": _env_int("EVA_DB_POOL_MIN", 1),
+    "rag_pool_max": _env_int("EVA_DB_POOL_MAX", 6),
+    "rag_connect_timeout": _env_float("EVA_DB_CONNECT_TIMEOUT", 3.0),
+    "ollama_keep_alive": os.getenv("EVA_OLLAMA_KEEP_ALIVE", "30m"),
+    "performance_logging": _env_bool("EVA_PERFORMANCE_LOGGING", False),
+    "profile_memory_isolation": _env_bool("EVA_PROFILE_MEMORY_ISOLATION", False),
 
 }

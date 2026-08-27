@@ -1,0 +1,18 @@
+[Unit]
+Description=EVA local assistant
+Wants=network-online.target ollama.service postgresql.service
+After=network-online.target ollama.service postgresql.service
+
+[Service]
+Type=simple
+User=eva
+WorkingDirectory=/opt/eva
+EnvironmentFile=/opt/eva/.env
+ExecStartPre=/opt/eva/.venv/bin/python -m tools.wait_dependencies
+ExecStart=/opt/eva/.venv/bin/python /opt/eva/main.py
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

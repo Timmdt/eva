@@ -1,12 +1,11 @@
 import hashlib
 import json
 import logging
+import math
 import os
 import tempfile
 from pathlib import Path
 from typing import Any
-
-import numpy as np
 
 try:
     import ollama
@@ -76,17 +75,15 @@ class RAGCreator:
                 "Ollama hat kein Embedding zurückgegeben."
             )
 
-        return self._normalize_vector(embedding).tolist()
+        return self._normalize_vector(embedding)
 
     @staticmethod
-    def _normalize_vector(vector: list[float] | np.ndarray) -> np.ndarray:
-        arr = np.asarray(vector, dtype=np.float32)
-
-        norm = np.linalg.norm(arr)
+    def _normalize_vector(vector: list[float]) -> list[float]:
+        arr = [float(value) for value in vector]
+        norm = math.sqrt(sum(value * value for value in arr))
         if norm == 0:
             raise ValueError("Embedding besitzt die Länge 0.")
-
-        return arr / norm
+        return [value / norm for value in arr]
 
     @staticmethod
     def _content_hash(text: str) -> str:
@@ -299,9 +296,10 @@ class RAGCreator:
 
             # Weil beide Vektoren normalisiert sind:
             # Cosine Similarity == Dot Product
-            score = float(
-                np.dot(query_embedding, doc_embedding)
-            )
+            score = float(sum(
+                left * right
+                for left, right in zip(query_embedding, doc_embedding, strict=True)
+            ))
 
             if score >= threshold_value:
                 result = dict(document)

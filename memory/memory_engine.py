@@ -802,6 +802,7 @@ def reflect(
                 "top_p": 0.85,
             },
             stream=False,
+            keep_alive=os.getenv("EVA_OLLAMA_KEEP_ALIVE", "30m"),
         )
 
         return str(
@@ -886,6 +887,7 @@ def project_entry(
                 "top_p": 0.80,
             },
             stream=False,
+            keep_alive=os.getenv("EVA_OLLAMA_KEEP_ALIVE", "30m"),
         )
 
         parsed = _parse_project_result(

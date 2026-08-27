@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 
 import ollama
@@ -21,7 +22,7 @@ class EVADecisionEngine:
 
     def __init__(
         self,
-        model: str = "qwen2.5:7b-instruct-q4_K_M",
+        model: str = "qwen2.5:1.5b",
     ) -> None:
         self.model = model
 
@@ -139,8 +140,8 @@ Für Recherche:
                     "num_ctx": 2048,
                 },
                 format="json",
-                keep_alive=0,
                 stream=False,
+                keep_alive=os.getenv("EVA_OLLAMA_KEEP_ALIVE", "30m"),
             )
 
             raw = (
