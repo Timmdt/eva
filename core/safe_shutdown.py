@@ -8,6 +8,7 @@ from typing import Callable
 
 from core.activity import INGESTION_LOCK, activity_registry
 
+
 logger = logging.getLogger(__name__)
 
 
@@ -26,7 +27,7 @@ class ShutdownDecision:
 
 
 class SafeShutdown:
-    """All shutdown gates are checked centrally; default behavior is log-only."""
+    """Server-local safety gates for authenticated remote shutdown requests."""
 
     def __init__(self, *, feature_enabled: bool, allow_shutdown: bool,
                  keep_awake_file: Path, inhibit_file: Path, boot_grace: float = 600.0,
@@ -43,7 +44,7 @@ class SafeShutdown:
 
     def evaluate(self) -> ShutdownDecision:
         if not self.feature_enabled:
-            return ShutdownDecision(False, "Sentry ist deaktiviert")
+            return ShutdownDecision(False, "Remote-Shutdown ist deaktiviert")
         if activity_registry.active("request"):
             return ShutdownDecision(False, "aktive EVA-Anfrage")
         if activity_registry.active("ingestion") or INGESTION_LOCK.exists():
@@ -64,7 +65,7 @@ class SafeShutdown:
         if not decision.allowed:
             logger.info("Shutdown verhindert: %s", decision.reason)
         elif decision.dry_run:
-            logger.warning("Would shut down server now.")
+            logger.warning("Would shut down EVA server now.")
         else:
             self.executor()
         return decision

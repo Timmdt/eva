@@ -1,5 +1,5 @@
 [Unit]
-Description=EVA local Sentry presence service
+Description=EVA desktop visual presence agent
 Wants=network-online.target
 After=network-online.target
 
@@ -8,10 +8,10 @@ Type=simple
 User=eva
 WorkingDirectory=/opt/eva
 EnvironmentFile=/opt/eva/.env
-ExecStart=/opt/eva/.venv/bin/python -m sentry.run
-Restart=always
+ExecStart=/opt/eva/.venv/bin/python -m desktop_agent.main
+Restart=on-failure
 RestartSec=5
 NoNewPrivileges=true
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=graphical.target

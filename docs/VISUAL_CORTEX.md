@@ -1,17 +1,23 @@
-# Visual Cortex
+# Desktop Agent und Presence Fusion
 
-Der Desktop-Client trennt Face Presence (`visual_cortex.presence`) und Identity Recognition (`visual_cortex.identity`). Zustände sind:
-
-- `ABSENT`
-- `PRESENT_UNKNOWN`
-- `PRESENT_USER`
-
-Identity-Ergebnisse enthalten Name und Confidence. Die leichte OpenCV-Implementierung erzeugt lokal einen normalisierten Deskriptor aus dem größten erkannten Gesicht. Enrollment speichert nur diese Deskriptoren in der ignorierten Datei `data/faces.json`; Kameraframes werden nicht gespeichert.
+Der optionale `desktop_agent` läuft erst auf dem bereits geweckten normalen Desktop-PC. Er ergänzt die zentrale Raum-Presence des Sentry-PCs um Schreibtisch-Präsenz und besitzt absichtlich keine Wake-on-LAN- oder Shutdown-Funktion.
 
 ```bash
-pip install -r requirements-optional.txt
-python3 -m sentry.enroll Tim
-EVA_VISUAL_CORTEX_ENABLED=true python3 -m visual_cortex.run
+EVA_DESKTOP_AGENT_ENABLED=true python3 -m desktop_agent.main
 ```
 
-`VisualConfig.save_frames` und `EVA_VISUAL_SAVE_FRAMES` sind standardmäßig `false`. Es gibt keine automatische Sammlung fremder Gesichter. Unknown und Visitor erhalten mit `EVA_PROFILE_MEMORY_ISOLATION=true` keinen privaten Memory-Kontext; registrierte Profile dürfen personalisierten Kontext nutzen. Diese Zuordnung dient Begrüßung, Profil und Memory-Auswahl, niemals sicherheitskritischer Autorisierung.
+Die Desktop-Webcam verarbeitet 1–5 Frames pro Sekunde. Face Detection läuft zuerst; lokale Identity Recognition nur bei erkanntem Gesicht. Zustandsänderungen und ein sparsamer Heartbeat werden per `POST /presence` an den EVA-Server gemeldet.
+
+## Fusion
+
+```text
+room=true,  desk=false -> Nutzer im Raum, nicht am Arbeitsplatz
+room=true,  desk=true  -> Nutzer am Arbeitsplatz
+room=false, desk=false -> vermutlich abwesend
+```
+
+Persönlicher Memory-Kontext wird nur freigegeben, wenn eine registrierte Identity auch vom Desk-Sensor bestätigt ist. `UNKNOWN` und `Visitor` erhalten keinen privaten Kontext. Diese Identity dient ausschließlich Begrüßung, Profil- und Memory-Auswahl; sie ist kein Authentifizierungsfaktor für sensible Aktionen.
+
+Gesichtsdeskriptoren werden bewusst und lokal in `data/faces.json` registriert. Frames werden standardmäßig nicht gespeichert. `EVA_PRESENCE_TOKEN` schützt den lokalen Presence-Endpunkt, wenn ein Token konfiguriert ist.
+
+Die ältere `visual_cortex`-API bleibt für Kompatibilität erhalten; für die Drei-Rechner-Architektur ist `desktop_agent` der vorgesehene Einstiegspunkt.

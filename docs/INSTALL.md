@@ -45,14 +45,10 @@ Der Health-Server kann aus einem eigenen Launcher mit `interfaces.health_server.
 
 Für den systemd-Betrieb setze `EVA_HEALTH_ENABLED=true` und eine für den kleinen Server erreichbare `EVA_HEALTH_HOST`-Adresse. `ExecStartPre=python -m tools.wait_dependencies` wartet auf Ollama, PostgreSQL, pgvector und die RAG-Migration; erst danach startet der EVA-Prozess.
 
-## Sentry-Werte
+## Externer Sentry-PC
 
-Trage lokal `EVA_TAPO_RTSP_URL`, `EVA_SERVER_MAC`, `EVA_SERVER_IP`, Broadcast und Health-URL ein. Starte zuerst mit:
+Der Sentry-PC verwendet ein eigenes Repository und wird nicht aus diesem EVA-Projekt installiert. Der vollständige Implementierungsauftrag steht in `docs/SENTRY_PC_PROMPT.md`.
 
-```dotenv
-EVA_SENTRY_ENABLED=true
-EVA_SENTRY_MODE=presence_only
-EVA_SENTRY_ALLOW_SHUTDOWN=false
-```
+Auf dem EVA-Server müssen `EVA_HEALTH_ENABLED=true`, eine vom Sentry-Netz erreichbare `EVA_HEALTH_HOST`-Adresse sowie mit dem externen Sentry-PC übereinstimmende `EVA_SERVER_CONTROL_TOKEN`- und `EVA_PRESENCE_TOKEN`-Werte gesetzt werden. Beschränke Port 8765 per Firewall auf Sentry- und Desktop-IP. `EVA_ALLOW_REMOTE_SHUTDOWN=false` bleibt zunächst Dry-Run; aktiviere echten Shutdown erst nach mehrtägiger Prüfung aller Inhibitoren.
 
-Prüfe Logs, Readiness, Cooldown und alle Inhibitoren mehrere Tage. Aktiviere echten Shutdown erst danach bewusst. Enrollment ist optional; alle Kamera-/Face-Schritte bleiben lokal.
+Auf dem Desktop werden die optionalen OpenCV-Abhängigkeiten, ein lokaler bewusst kopierter Face-Store und `EVA_DESKTOP_AGENT_ENABLED=true` benötigt. Start ist `python3 -m desktop_agent.main`; die optionale Vorlage liegt in `deployment/systemd/eva-desktop-agent.service`. Der Desktop-Agent kann keine Geräte wecken oder herunterfahren.

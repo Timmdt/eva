@@ -1716,6 +1716,8 @@ class EVA:
 
     def set_identity(self, identity: str | None) -> None:
         """Apply an optional local visual identity; never grants critical authorization."""
+        if self.current_identity == identity:
+            return
         self.current_identity = identity
         self.state["current_identity"] = identity
         save_state(self.state)

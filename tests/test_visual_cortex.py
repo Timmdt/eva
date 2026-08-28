@@ -3,6 +3,7 @@ import unittest
 from pathlib import Path
 
 from memory.profile_policy import access_for_identity
+from interfaces.presence_state import PresenceFusion
 from visual_cortex.identity import IdentityStore
 from visual_cortex.state import VisualConfig
 
@@ -26,6 +27,28 @@ class VisualCortexTest(unittest.TestCase):
         self.assertFalse(access_for_identity(None).allow_private_memory)
         self.assertFalse(access_for_identity("Visitor").allow_private_memory)
         self.assertTrue(access_for_identity("Tim").allow_private_memory)
+
+    def test_room_and_desk_presence_fusion_gates_personal_context(self):
+        fusion = PresenceFusion()
+        room = fusion.update({"sensor": "room", "presence": True,
+                              "identity": "Tim", "confidence": 0.95})
+        self.assertTrue(room.room_presence)
+        self.assertFalse(room.personal_context_allowed)
+        desk = fusion.update({"sensor": "desk", "presence": True,
+                              "identity": "Tim", "confidence": 0.91})
+        self.assertTrue(desk.desk_presence)
+        self.assertTrue(desk.personal_context_allowed)
+        unknown = fusion.update({"sensor": "desk", "presence": True,
+                                 "identity": None, "confidence": 0.0})
+        self.assertFalse(unknown.personal_context_allowed)
+
+    def test_stale_desk_presence_cannot_keep_private_context_open(self):
+        now = [0.0]
+        fusion = PresenceFusion(ttl_seconds=10, clock=lambda: now[0])
+        self.assertTrue(fusion.update({"sensor": "desk", "presence": True,
+                                      "identity": "Tim"}).personal_context_allowed)
+        now[0] = 10.1
+        self.assertFalse(fusion.current().personal_context_allowed)
 
 
 if __name__ == "__main__":

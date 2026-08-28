@@ -121,6 +121,6 @@ EVA_CONFIG = {
     "rag_connect_timeout": _env_float("EVA_DB_CONNECT_TIMEOUT", 3.0),
     "ollama_keep_alive": os.getenv("EVA_OLLAMA_KEEP_ALIVE", "30m"),
     "performance_logging": _env_bool("EVA_PERFORMANCE_LOGGING", False),
-    "profile_memory_isolation": _env_bool("EVA_PROFILE_MEMORY_ISOLATION", False),
+    "profile_memory_isolation": _env_bool("EVA_PROFILE_MEMORY_ISOLATION", True),
 
 }

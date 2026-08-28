@@ -1,4 +1,4 @@
 # PDF ingestion
 pypdf>=4.0.0
-# Sentry and Visual Cortex camera support (headless server build)
+# Desktop Visual Cortex camera support
 opencv-python-headless>=4.8.0
