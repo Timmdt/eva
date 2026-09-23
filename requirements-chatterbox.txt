@@ -1,0 +1,5 @@
+# Natural multilingual GPU text-to-speech in an isolated virtual environment.
+# Keep separate from requirements-optional.txt because Chatterbox pins NumPy/Torch.
+# Perth still imports pkg_resources, which was removed from newer setuptools.
+setuptools<81
+chatterbox-tts @ git+https://github.com/resemble-ai/chatterbox.git@5de7a54aa4e5e2baadb0182dde554908b48b85c2

@@ -120,6 +120,8 @@ EVA_CONFIG = {
     "rag_pool_max": _env_int("EVA_DB_POOL_MAX", 6),
     "rag_connect_timeout": _env_float("EVA_DB_CONNECT_TIMEOUT", 3.0),
     "ollama_keep_alive": os.getenv("EVA_OLLAMA_KEEP_ALIVE", "30m"),
+    "llm_num_ctx": _env_int("EVA_LLM_NUM_CTX", 4096),
+    "performance_debug": _env_bool("EVA_PERFORMANCE_DEBUG", False),
     "performance_logging": _env_bool("EVA_PERFORMANCE_LOGGING", False),
     "profile_memory_isolation": _env_bool("EVA_PROFILE_MEMORY_ISOLATION", True),
 

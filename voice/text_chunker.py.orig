@@ -1,0 +1,161 @@
+from __future__ import annotations
+
+import json
+import re
+import time
+from pathlib import Path
+
+from .config import VoiceConfig
+
+
+WORD_RE = re.compile(r"[\wÄÖÜäöüß]+(?:[.][\wÄÖÜäöüß]+)*", re.UNICODE)
+URL_RE = re.compile(r"https?://\S+", re.IGNORECASE)
+FENCE_RE = re.compile(r"```.*?```", re.DOTALL)
+LINK_RE = re.compile(r"\[([^\]]+)\]\(([^)]+)\)")
+ABBREVIATIONS = {"z.b.", "u.a.", "bzw.", "ca.", "dr.", "prof.", "etc."}
+
+
+def _load_rules(path: Path | None) -> dict[str, str]:
+    if path is None or not path.is_file():
+        return {}
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return {str(key): str(replacement) for key, replacement in value.items() if replacement}
+
+
+def sanitize_for_speech(
+    text: str,
+    *,
+    read_code: bool = False,
+    read_urls: bool = False,
+    pronunciation_rules: dict[str, str] | None = None,
+) -> str:
+    spoken = str(text or "")
+    if read_code:
+        spoken = re.sub(r"```(?:\w+)?\s*(.*?)```", r" \1 ", spoken, flags=re.DOTALL)
+    else:
+        spoken = FENCE_RE.sub(" Codebeispiel ausgelassen. ", spoken)
+    spoken = LINK_RE.sub(r"\1" if not read_urls else r"\1, \2", spoken)
+    spoken = URL_RE.sub(" Link " if not read_urls else lambda match: f" {match.group(0)} ", spoken)
+    spoken = re.sub(r"`([^`]+)`", r"\1", spoken)
+    spoken = re.sub(r"(?m)^\s*\|?\s*:?-{3,}.*$", " ", spoken)
+    spoken = re.sub(r"(?m)^.*\|.*\|.*$", " ", spoken)
+    spoken = re.sub(r"(?m)^\s{0,3}(?:#{1,6}\s*|[-*+]\s+|>\s*)", "", spoken)
+    spoken = re.sub(r"[*_~]", "", spoken)
+    spoken = re.sub(r"\[(?:LOAD_DOSSIER|WEB_SEARCH):[^\]]+\]", " ", spoken)
+    for source, replacement in (pronunciation_rules or {}).items():
+        spoken = re.sub(rf"(?<!\w){re.escape(source)}(?!\w)", replacement, spoken)
+    return " ".join(spoken.split()).strip()
+
+
+def _word_count(text: str) -> int:
+    return len(WORD_RE.findall(text))
+
+
+def _safe_sentence_boundaries(text: str) -> list[int]:
+    boundaries: list[int] = []
+    for match in re.finditer(r"[.!?](?:[\"'»)]*)?(?=\s|$)", text):
+        end = match.end()
+        prefix = text[:end].rstrip().casefold()
+        token = prefix.rsplit(" ", 1)[-1]
+        if token in ABBREVIATIONS:
+            continue
+        dot = match.start()
+        if text[dot] == "." and dot > 0 and dot + 1 < len(text):
+            if text[dot - 1].isdigit() and text[dot + 1].isdigit():
+                continue
+        url_start = max(text.rfind("http://", 0, end), text.rfind("https://", 0, end))
+        if url_start >= 0 and " " not in text[url_start:end]:
+            continue
+        boundaries.append(end)
+    return boundaries
+
+
+def _soft_boundaries(text: str) -> list[int]:
+    return [match.end() for match in re.finditer(r"[,;:](?=\s|$)", text)]
+
+
+def _word_boundary(text: str, target: int, maximum: int) -> int | None:
+    matches = list(WORD_RE.finditer(text))
+    if len(matches) < target:
+        return None
+    index = min(maximum, len(matches)) - 1
+    end = matches[index].end()
+    following = re.search(r"\s", text[end:])
+    return end + following.start() if following else end
+
+
+class SpeechChunker:
+    def __init__(self, config: VoiceConfig, *, clock=time.monotonic) -> None:
+        self.config = config
+        self.clock = clock
+        self.rules = _load_rules(config.pronunciation_rules)
+        self.reset()
+
+    def reset(self) -> None:
+        self.buffer = ""
+        self.first = True
+        self.buffer_started_at: float | None = None
+
+    def _emit(self, end: int) -> str | None:
+        raw = self.buffer[:end].strip()
+        self.buffer = self.buffer[end:].lstrip()
+        self.buffer_started_at = self.clock() if self.buffer else None
+        spoken = sanitize_for_speech(
+            raw,
+            read_code=self.config.read_code,
+            read_urls=self.config.read_urls,
+            pronunciation_rules=self.rules,
+        )
+        if spoken:
+            self.first = False
+            return spoken
+        return None
+
+    def feed(self, fragment: str) -> list[str]:
+        if not fragment:
+            return []
+        if not self.buffer:
+            self.buffer_started_at = self.clock()
+        self.buffer += fragment
+        chunks: list[str] = []
+        while True:
+            minimum = self.config.first_chunk_min_words if self.first else self.config.chunk_min_words
+            target = self.config.first_chunk_target_words if self.first else self.config.chunk_target_words
+            words = _word_count(self.buffer)
+            if words < minimum:
+                break
+            sentence = [end for end in _safe_sentence_boundaries(self.buffer) if _word_count(self.buffer[:end]) >= minimum]
+            if sentence:
+                chunk = self._emit(sentence[0])
+            else:
+                soft = [end for end in _soft_boundaries(self.buffer) if _word_count(self.buffer[:end]) >= target]
+                waited = (
+                    self.buffer_started_at is not None
+                    and (self.clock() - self.buffer_started_at) * 1000.0 >= self.config.max_chunk_wait_ms
+                )
+                if soft:
+                    chunk = self._emit(soft[0])
+                elif words >= self.config.chunk_max_words:
+                    end = _word_boundary(self.buffer, target, self.config.chunk_max_words)
+                    chunk = self._emit(end) if end else None
+                elif waited and words >= minimum:
+                    end = _word_boundary(self.buffer, min(target, words), self.config.chunk_max_words)
+                    chunk = self._emit(end) if end else None
+                else:
+                    break
+            if chunk:
+                chunks.append(chunk)
+            elif not self.buffer:
+                break
+        return chunks
+
+    def flush(self) -> list[str]:
+        if not self.buffer.strip():
+            self.reset()
+            return []
+        chunk = self._emit(len(self.buffer))
+        self.reset()
+        return [chunk] if chunk else []

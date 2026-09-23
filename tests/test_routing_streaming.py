@@ -19,6 +19,12 @@ class RoutingStreamingTest(unittest.TestCase):
         self.assertEqual(decision.action, "RAG")
         self.assertGreater(decision.confidence, 0.9)
 
+    def test_encyclopedic_overview_uses_wikipedia_with_clean_subject(self):
+        router = IntentRouter("unused")
+        decision = router.route("kannst du mir was über dem BMW E46 erzählen")
+        self.assertEqual(decision.action, "WIKIPEDIA")
+        self.assertEqual(decision.query, "BMW E46")
+
     def test_explicit_tuning_search_preserves_meaning(self):
         router = IntentRouter("unused")
         decision = router.route(
@@ -36,6 +42,35 @@ class RoutingStreamingTest(unittest.TestCase):
         result = eva._execute_intent(
             IntentDecision(action="WEB_SEARCH", query="aktuell"), "frage")
         self.assertEqual(result, ("LIVE RESULT", None))
+
+    def test_quick_wellbeing_reply_avoids_formal_help_phrase(self):
+        reply = EVA._quick_conversation_response("hi wie geht es dir")
+        self.assertEqual(reply, "Hi, mir geht es gut, danke. Und wie geht es dir?")
+        self.assertNotIn("Ihnen", reply)
+
+    def test_wikipedia_summary_bypasses_language_model(self):
+        web_data = (
+            "[System-Meldung: Live-Web-Daten geladen]\n\nWIKIPEDIA\n"
+            "Titel: BMW E46\nBeschreibung: Pkw-Baureihe\n"
+            "Zusammenfassung: Der BMW E46 ist die vierte Generation der BMW-3er-Reihe. "
+            "Er kam 1998 auf den Markt.\n"
+            "Quelle: https://de.wikipedia.org/wiki/BMW_E46"
+        )
+        eva = EVA.__new__(EVA)
+        eva._chat_stream = Mock(side_effect=AssertionError("LLM darf nicht laufen"))
+        output = "".join(eva.generate_response_stream("Erzähl mir etwas", web_data=web_data))
+        self.assertIn("vierte Generation", output)
+        self.assertIn("https://de.wikipedia.org/wiki/BMW_E46", output)
+        eva._chat_stream.assert_not_called()
+
+    def test_general_web_prompt_is_spoken_friendly(self):
+        eva = EVA(run_module_tests=False)
+        messages = eva._build_web_answer_messages(
+            "Erzähl mir etwas über den BMW E46", "WIKIPEDIA\nQuelle: test"
+        )
+        prompt = messages[0]["content"]
+        self.assertIn("grammatisch vollständige Sätze", prompt)
+        self.assertNotIn("Alternativen je nach Tuningziel", prompt)
 
     def test_web_prompt_requires_direct_comparison(self):
         eva = EVA(run_module_tests=False)
@@ -136,6 +171,27 @@ class RoutingStreamingTest(unittest.TestCase):
         output = "".join(eva.receive_stream("Test"))
         self.assertEqual(output, "Hallo Welt")
         eva._append_history.assert_called_once_with("Test", "Hallo Welt")
+
+    def test_voice_receives_stream_while_history_keeps_full_response(self):
+        eva = EVA(run_module_tests=False)
+        eva.module_manager.route = Mock(return_value=None)
+        eva._route_intent = Mock(return_value=IntentDecision(action="NONE"))
+        eva._execute_intent = Mock(return_value=(None, None))
+        eva.generate_response_stream = Mock(return_value=iter(["Hallo. ", "Alles läuft."]))
+        eva._append_history = Mock()
+        eva.voice = Mock()
+        eva.voice.start_response.return_value = 7
+        eva.voice.metrics.snapshot.return_value = {}
+
+        output = "".join(eva.receive_stream("Test"))
+
+        self.assertEqual(output, "Hallo. Alles läuft.")
+        self.assertEqual(
+            [call.args[0] for call in eva.voice.feed_text.call_args_list],
+            ["Hallo. ", "Alles läuft."],
+        )
+        eva.voice.finish_response.assert_called_once_with()
+        eva._append_history.assert_called_once_with("Test", "Hallo. Alles läuft.")
 
     def test_internal_tags_are_removed_across_stream_chunks(self):
         chunks = iter(["Antwort ", "[LOAD_", "DOSSIER: Intern]", " sichtbar"])

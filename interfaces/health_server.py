@@ -11,11 +11,18 @@ from pathlib import Path
 from typing import Any, Callable
 
 from core.activity import INGESTION_LOCK, KEEP_AWAKE_FILE, activity_registry
+from interfaces.presence_automation import (
+    PresenceAutomation,
+    PresenceAutomationConfig,
+)
 from interfaces.presence_state import presence_fusion
 from core.safe_shutdown import SafeShutdown
 
 
-def health_payload(eva: Any) -> dict[str, Any]:
+def health_payload(
+    eva: Any,
+    automation: PresenceAutomation | None = None,
+) -> dict[str, Any]:
     ollama_ok = False
     try:
         with urllib.request.urlopen(
@@ -27,21 +34,40 @@ def health_payload(eva: Any) -> dict[str, Any]:
         pass
     rag_ok = bool(eva.rag and getattr(eva.rag, "health", lambda: False)())
     postgres_ok = rag_ok
-    ready = ollama_ok and postgres_ok and rag_ok
+    voice_status = {"enabled": False, "ready": False}
+    status_provider = getattr(eva, "voice_status", None)
+    if callable(status_provider):
+        try:
+            voice_status = status_provider()
+        except Exception:
+            voice_status = {
+                "enabled": True, "ready": False, "error": "status unavailable",
+            }
+    ready = ollama_ok and postgres_ok and rag_ok and (
+        not voice_status.get("enabled") or voice_status.get("ready")
+    )
     fused = presence_fusion.current()
     expected_identity = fused.identity if fused.personal_context_allowed else None
     if getattr(eva, "current_identity", None) != expected_identity:
         eva.set_identity(expected_identity)
-    return {"status": "ready" if ready else "degraded", "ollama": ollama_ok,
+    payload = {"status": "ready" if ready else "degraded", "ollama": ollama_ok,
             "postgres": postgres_ok, "rag": rag_ok, "eva": True,
             "active_request": activity_registry.active("request"),
             "ingestion": activity_registry.active("ingestion") or INGESTION_LOCK.exists(),
             "critical_task": activity_registry.active("critical"),
             "keep_awake": KEEP_AWAKE_FILE.exists(),
-            "presence": fused.to_dict()}
+            "presence": fused.to_dict(),
+            "voice": voice_status}
+    if automation is not None:
+        payload["presence_automation"] = automation.status()
+    return payload
 
 
-def handler_factory(check: Callable[[], dict[str, Any]], eva: Any | None = None) -> type[BaseHTTPRequestHandler]:
+def handler_factory(
+    check: Callable[[], dict[str, Any]],
+    eva: Any | None = None,
+    automation: PresenceAutomation | None = None,
+) -> type[BaseHTTPRequestHandler]:
     class HealthHandler(BaseHTTPRequestHandler):
         def _json(self, status: int, value: dict[str, Any]) -> None:
             payload = json.dumps(value).encode("utf-8")
@@ -75,6 +101,8 @@ def handler_factory(check: Callable[[], dict[str, Any]], eva: Any | None = None)
                     fused = presence_fusion.update(report)
                     if eva is not None:
                         eva.set_identity(fused.identity if fused.personal_context_allowed else None)
+                    if automation is not None:
+                        automation.submit_report(report)
                     self._json(202, fused.to_dict())
                 except (ValueError, json.JSONDecodeError) as exc:
                     self._json(400, {"error": str(exc)})
@@ -117,8 +145,34 @@ def handler_factory(check: Callable[[], dict[str, Any]], eva: Any | None = None)
     return HealthHandler
 
 
+def _weather_provider(eva: Any) -> Callable[[str], str | None]:
+    def provide(location: str) -> str | None:
+        manager = getattr(eva, "module_manager", None)
+        module = manager.get_module("WebSearchCore") if manager is not None else None
+        weather = getattr(module, "weather", None)
+        if not callable(weather):
+            return None
+        data = weather(location)
+        if not data:
+            return None
+        return (
+            f"In {data['location']} sind es {data['temperature']} Grad, "
+            f"gefühlt {data['feels_like']} Grad. {data['description']}."
+        )
+    return provide
+
+
 def serve(eva: Any, host: str = "127.0.0.1", port: int = 8765) -> None:
-    server = ThreadingHTTPServer((host, port), handler_factory(lambda: health_payload(eva), eva))
+    automation = PresenceAutomation(
+        PresenceAutomationConfig.from_env(),
+        weather_provider=_weather_provider(eva),
+        announcer=eva.speak,
+        start_worker=True,
+    )
+    server = ThreadingHTTPServer(
+        (host, port),
+        handler_factory(lambda: health_payload(eva, automation), eva, automation),
+    )
     server.serve_forever()
 
 

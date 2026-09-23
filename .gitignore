@@ -1,5 +1,8 @@
 venv/
 .venv/
+.venv-chatterbox/
+.venv-qwen/
+.venv-xtts/
 env/
 bin/
 lib/
@@ -19,3 +22,16 @@ memory.json
 data/faces.json
 rag_db.json
 data/faces.json
+data/presence_automation.json
+data/presence_automation.json.tmp
+
+# Downloaded local TTS voice models
+data/voices/
+# Generated TTS samples
+data/tts/
+
+# Private voice references and biometric speaker conditioning
+voice/reference/
+voice/cache/
+*.wav
+*.flac

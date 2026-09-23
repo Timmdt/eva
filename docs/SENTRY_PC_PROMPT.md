@@ -111,6 +111,8 @@ EVA_WOL_COOLDOWN=60
 EVA_WOL_MAX_ATTEMPTS=3
 EVA_DEVICE_BOOT_TIMEOUT=180
 EVA_DEVICE_STATUS_INTERVAL=2
+EVA_SENTRY_ALLOW_SERVER_WAKE=false
+EVA_SENTRY_ALLOW_DESKTOP_WAKE=false
 EVA_SENTRY_ALLOW_SERVER_SHUTDOWN=false
 EVA_SENTRY_ALLOW_DESKTOP_SHUTDOWN=false
 
@@ -183,6 +185,9 @@ wake_all_user_devices()
 
 Bei erlaubter Identity beide Geräte unabhängig und möglichst parallel behandeln:
 
+0. Wake-on-LAN für das Gerät nur ausführen, wenn der passende
+   `EVA_SENTRY_ALLOW_*_WAKE`-Schalter aktiviert ist. Bei `false` ausschließlich
+   Präsenz melden und keine Magic Packets senden.
 1. Gerätestatus prüfen.
 2. Wenn bereits online/ready: kein Magic Packet senden.
 3. Sonst Magic Packet senden.

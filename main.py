@@ -4,11 +4,20 @@ import logging
 import os
 from pathlib import Path
 
+from core.env_loader import load_env_file
+
+ROOT = Path(__file__).resolve().parent
+
+# Direktstarts und IDE-Starts erhalten dieselbe Umgebung wie systemd, ohne die
+# .env als Shellcode auszuführen. Bereits gesetzte Prozessvariablen haben Vorrang.
+load_env_file(ROOT / ".env")
+
+
 log_level_name = os.getenv("EVA_LOG_LEVEL", "INFO").strip().upper()
 log_level = getattr(logging, log_level_name, logging.INFO)
 logging.basicConfig(
     level=log_level,
-    format='[%(name)s] %(levelname)s: %(message)s'
+    format='%(levelname)s: %(message)s'
 )
 
 # Bibliotheks-Transportdetails dürfen nicht zwischen EVAs Stream-Chunks landen.
@@ -16,13 +25,14 @@ if os.getenv("EVA_HTTP_DEBUG", "false").lower() not in {"1", "true", "yes", "on"
     for noisy_logger in ("httpcore", "httpx", "urllib3"):
         logging.getLogger(noisy_logger).setLevel(logging.WARNING)
 
-ROOT = Path(__file__).resolve().parent
-
 from core.eva import EVA
 
 
 def main() -> None:
     eva = EVA()
+
+    eva.warm_llm()
+    eva.start_voice()
 
     if os.getenv("EVA_HEALTH_ENABLED", "false").lower() in {"1", "true", "yes", "on"}:
         from interfaces.health_server import start_in_thread
@@ -38,9 +48,17 @@ def main() -> None:
 
     startup_text = eva.startup()
 
-    if startup_text:
+    presence_greeting_enabled = os.getenv(
+        "EVA_PRESENCE_AUTOMATION_ENABLED", "false"
+    ).lower() in {"1", "true", "yes", "on"}
+
+    if startup_text and not presence_greeting_enabled:
         eva.speak(
             startup_text
+        )
+    elif startup_text:
+        logging.info(
+            "Startup-Begrüßung wartet auf eine erkannte Raum-Präsenz."
         )
 
     try:

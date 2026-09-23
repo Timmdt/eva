@@ -26,6 +26,23 @@ ALLOWED_ACTIONS = {
 }
 
 
+CONVERSATIONAL_PATTERNS = (
+    r"(?:hallo|hi|hey|moin|servus|guten (?:morgen|tag|abend))",
+    r"(?:wie geht(?: es|s)? dir|wie fühlst du dich|alles gut bei dir)",
+    r"(?:danke|dankeschön|vielen dank|bitte|gern geschehen)",
+    r"(?:was|hä|häh|bitte was|wie bitte|was meinst du)",
+    r"(?:okay|ok|alles klar|verstehe|cool)",
+    r"(?:wer bist du|was bist du|was kannst du)",
+)
+
+CONTEXT_RESET_PATTERNS = (
+    CONVERSATIONAL_PATTERNS[0],
+    CONVERSATIONAL_PATTERNS[1],
+    CONVERSATIONAL_PATTERNS[2],
+    CONVERSATIONAL_PATTERNS[4],
+    CONVERSATIONAL_PATTERNS[5],
+)
+
 ROUTER_PROMPT = r"""
 Du bist EVAs Intent-Router. Du beantwortest die Benutzerfrage NICHT.
 Du entscheidest nur, welche Datenquellen EVA vor der eigentlichen Antwort braucht.
@@ -65,18 +82,21 @@ WEB_SEARCH_RAG
 - Sowohl aktuelle Webdaten als auch lokale Dokumente werden benötigt.
 
 REGELN
-1. Interpretiere die aktuelle Nachricht IM KONTEXT der vorherigen Unterhaltung.
+1. Die aktuelle Nachricht hat immer Vorrang. Ist sie eigenständig oder wechselt
+   erkennbar das Thema, ignoriere frühere Suchanfragen vollständig.
 2. Folgefragen wie "und was davon?", "welches davon?" oder "wie sieht es damit aus?"
    beziehen sich auf das vorherige Thema.
-3. Nutze WEB_SEARCH nicht nur wegen einzelner Wörter. Entscheide semantisch.
-4. Nutze WEB_SEARCH auch ohne ausdrückliche Aufforderung, wenn Aktualität entscheidend ist.
-5. Nutze NONE, wenn das Modell die Frage stabil aus allgemeinem Wissen beantworten kann.
-6. Nutze MEMORY nur, wenn persönliche oder gespeicherte Informationen wirklich gebraucht werden.
-7. Erfinde keine Dossiernamen. Wenn ein passendes Dossier aus MEMORY_INDEX existiert,
+3. Smalltalk, Begrüßungen, Rückfragen wie "was?" und Fragen an EVA selbst sind
+   immer NONE. Verwandle sie niemals in eine frühere Websuche.
+4. Nutze WEB_SEARCH nicht nur wegen einzelner Wörter. Entscheide semantisch.
+5. Nutze WEB_SEARCH auch ohne ausdrückliche Aufforderung, wenn Aktualität entscheidend ist.
+6. Nutze NONE, wenn das Modell die Frage stabil aus allgemeinem Wissen beantworten kann.
+7. Nutze MEMORY nur, wenn persönliche oder gespeicherte Informationen wirklich gebraucht werden.
+8. Erfinde keine Dossiernamen. Wenn ein passendes Dossier aus MEMORY_INDEX existiert,
    gib dessen Namen exakt in dossier zurück.
-8. query muss eine kurze, eigenständige Suchanfrage sein. Löse Pronomen und Folgebezüge auf.
-9. confidence liegt zwischen 0.0 und 1.0.
-10. Antworte ausschließlich mit einem JSON-Objekt. Kein Markdown, keine Erklärung außen herum.
+9. query muss eine kurze, eigenständige Suchanfrage sein. Löse Pronomen und Folgebezüge auf.
+10. confidence liegt zwischen 0.0 und 1.0.
+11. Antworte ausschließlich mit einem JSON-Objekt. Kein Markdown, keine Erklärung außen herum.
 
 SCHEMA
 {
@@ -217,14 +237,58 @@ class IntentRouter:
             )
 
     @staticmethod
+    def is_conversational(user_message: str) -> bool:
+        lowered = " ".join(user_message.strip().split()).casefold()
+        return any(
+            re.fullmatch(pattern + r"[?!.]*", lowered)
+            for pattern in CONVERSATIONAL_PATTERNS
+        )
+
+    @staticmethod
+    def resets_context(user_message: str) -> bool:
+        lowered = " ".join(user_message.strip().split()).casefold()
+        return any(
+            re.fullmatch(pattern + r"[?!.]*", lowered)
+            for pattern in CONTEXT_RESET_PATTERNS
+        )
+
+    @staticmethod
     def _fast_route(user_message: str) -> IntentDecision | None:
         """Only unambiguous intents bypass the semantic model."""
         clean = " ".join(user_message.strip().split())
         lowered = clean.casefold()
+        if IntentRouter.is_conversational(clean):
+            return IntentDecision(
+                action="NONE",
+                confidence=1.0,
+                reason="klare Unterhaltung ohne externe Daten",
+            )
+        if re.search(
+            r"\b(?:wetter|wettervorhersage|temperatur|regnet|regen|schnee)\b"
+            r"|\bwie (?:warm|kalt)\b",
+            lowered,
+        ):
+            location_match = re.search(
+                r"\b(?:in|für)\s+([^?!.]+)", clean, flags=re.IGNORECASE
+            )
+            location = location_match.group(1).strip() if location_match else ""
+            return IntentDecision(
+                action="WEATHER",
+                query=clean,
+                location=location,
+                confidence=0.99,
+                reason="explizite Wetterfrage",
+            )
         url = re.search(r"https?://[^\s]+", clean)
         if url:
             return IntentDecision(action="URL", url=url.group(0), query=clean,
                                   confidence=1.0, reason="explizite URL")
+        overview_query = IntentRouter._encyclopedic_query(clean)
+        if overview_query:
+            return IntentDecision(
+                action="WIKIPEDIA", query=overview_query, confidence=0.98,
+                reason="enzyklopädischer Überblick über ein benanntes Thema",
+            )
         if re.search(r"\b(suche|recherchiere|schau|prüfe)\b.{0,30}\b(web|internet|online)\b",
                      lowered):
             return IntentDecision(action="WEB_SEARCH",
@@ -243,6 +307,20 @@ class IntentRouter:
             return IntentDecision(action="RAG", query=clean, confidence=0.98,
                                   reason="explizite lokale Dokumentquelle")
         return None
+
+    @staticmethod
+    def _encyclopedic_query(message: str) -> str:
+        patterns = (
+            r"\b(?:etwas|was|infos?|informationen?|fakten)\s+(?:über|zu)\s+"
+            r"(?:(?:den|dem|der|die|das)\s+)?(.+?)(?:\s+erzählen)?[?!.]*$",
+            r"\b(?:erzähl|erzähle)\w*\s+(?:mir\s+)?(?:etwas|was)?\s*"
+            r"(?:über|zu)\s+(?:(?:den|dem|der|die|das)\s+)?(.+?)[?!.]*$",
+        )
+        for pattern in patterns:
+            match = re.search(pattern, message, flags=re.IGNORECASE)
+            if match:
+                return match.group(1).strip(" ?!.,:")[:499]
+        return ""
 
     @staticmethod
     def _explicit_web_query(message: str) -> str:

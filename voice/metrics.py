@@ -1,0 +1,80 @@
+from __future__ import annotations
+
+import subprocess
+import threading
+import time
+from dataclasses import dataclass, field
+from typing import Any
+
+
+def nvidia_memory_mb() -> dict[str, int | str | None]:
+    command = [
+        "nvidia-smi",
+        "--query-gpu=name,memory.total,memory.used,memory.free",
+        "--format=csv,noheader,nounits",
+    ]
+    try:
+        result = subprocess.run(command, capture_output=True, text=True, timeout=5, check=False)
+        if result.returncode != 0 or not result.stdout.strip():
+            raise RuntimeError(result.stderr.strip())
+        name, total, used, free = [part.strip() for part in result.stdout.splitlines()[0].split(",")]
+        return {"gpu": name, "total_mb": int(total), "used_mb": int(used), "free_mb": int(free)}
+    except (OSError, ValueError, RuntimeError, subprocess.TimeoutExpired):
+        return {"gpu": None, "total_mb": 0, "used_mb": 0, "free_mb": 0}
+
+
+@dataclass
+class VoiceMetrics:
+    started_at: float = 0.0
+    first_text_chunk_at: float = 0.0
+    first_audio_at: float = 0.0
+    first_sound_at: float = 0.0
+    synthesis_finished_at: float = 0.0
+    peak_vram_mb: int = 0
+    idle_vram_mb: int = 0
+    conditioning_ms: float = 0.0
+    load_ms: float = 0.0
+    audio_seconds: float = 0.0
+    real_time_factor: float = 0.0
+    _lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
+
+    def begin(self) -> None:
+        with self._lock:
+            self.started_at = time.perf_counter()
+            self.first_text_chunk_at = 0.0
+            self.first_audio_at = 0.0
+            self.first_sound_at = 0.0
+            self.synthesis_finished_at = 0.0
+            self.peak_vram_mb = 0
+            self.audio_seconds = 0.0
+
+    def mark(self, name: str) -> None:
+        with self._lock:
+            if getattr(self, name, 0.0) == 0.0:
+                setattr(self, name, time.perf_counter())
+
+    def update_worker(self, values: dict[str, Any]) -> None:
+        with self._lock:
+            self.peak_vram_mb = max(self.peak_vram_mb, int(values.get("peak_vram_mb", 0)))
+            self.idle_vram_mb = int(values.get("idle_vram_mb", self.idle_vram_mb))
+            self.conditioning_ms = float(values.get("conditioning_ms", self.conditioning_ms))
+            self.real_time_factor = float(values.get("real_time_factor", self.real_time_factor))
+            self.load_ms = float(values.get("load_ms", self.load_ms))
+            self.audio_seconds += float(values.get("audio_seconds", 0.0))
+
+    def snapshot(self) -> dict[str, float | int]:
+        with self._lock:
+            origin = self.started_at
+            elapsed = lambda point: round((point - origin) * 1000.0, 1) if origin and point else 0.0
+            return {
+                "time_to_first_text_chunk_ms": elapsed(self.first_text_chunk_at),
+                "tts_time_to_first_audio_ms": elapsed(self.first_audio_at),
+                "time_to_first_sound_ms": elapsed(self.first_sound_at),
+                "voice_total_ms": elapsed(self.synthesis_finished_at),
+                "xtts_load_ms": round(self.load_ms, 1),
+                "speaker_conditioning_ms": round(self.conditioning_ms, 1),
+                "audio_seconds": round(self.audio_seconds, 3),
+                "peak_vram_mb": self.peak_vram_mb,
+                "real_time_factor": round(self.real_time_factor, 3),
+                "idle_vram_mb": self.idle_vram_mb,
+            }

@@ -1,0 +1,191 @@
+from __future__ import annotations
+
+import os
+import tempfile
+import threading
+import time
+import unittest
+from pathlib import Path
+from unittest.mock import Mock, patch
+
+from voice.audio_player import AudioPlayer
+from voice.config import VoiceConfig
+from voice.text_chunker import SpeechChunker, sanitize_for_speech
+from voice.voice_service import VoiceService
+from voice.xtts_engine import XTTSEngine
+
+
+class TextChunkerTest(unittest.TestCase):
+    def config(self, **overrides):
+        values = {
+            "first_chunk_min_words": 5,
+            "first_chunk_target_words": 8,
+            "chunk_min_words": 10,
+            "chunk_target_words": 18,
+            "chunk_max_words": 30,
+            "max_chunk_wait_ms": 350,
+        }
+        values.update(overrides)
+        return VoiceConfig(**values)
+
+    def test_first_complete_sentence_is_emitted_early(self):
+        chunker = SpeechChunker(self.config())
+        self.assertEqual(
+            chunker.feed("Ja, das können wir jetzt gemeinsam machen. Danach folgt "),
+            ["Ja, das können wir jetzt gemeinsam machen."],
+        )
+
+    def test_decimal_and_url_are_not_treated_as_sentence_end(self):
+        chunker = SpeechChunker(self.config(first_chunk_min_words=2))
+        self.assertEqual(chunker.feed("Qwen2.5 läuft unter https://example.test/api "), [])
+        self.assertEqual(chunker.feed("weiter und antwortet danach normal."), [
+            "Kwen zwei Punkt fünf läuft unter Link weiter und antwortet danach normal."
+        ])
+
+    def test_wait_limit_emits_a_safe_phrase(self):
+        now = [0.0]
+        chunker = SpeechChunker(
+            self.config(sentence_chunks_only=False), clock=lambda: now[0]
+        )
+        self.assertEqual(chunker.feed("Das ist eine ausreichend lange natürliche Einleitung ohne Ende"), [])
+        now[0] = 0.4
+        chunks = chunker.feed(" mit weiteren Worten")
+        self.assertEqual(len(chunks), 1)
+        self.assertNotEqual(chunks[0].split()[-1], "")
+
+    def test_sentence_mode_does_not_split_at_comma_or_wait_limit(self):
+        now = [0.0]
+        chunker = SpeechChunker(
+            self.config(sentence_chunks_only=True), clock=lambda: now[0]
+        )
+        self.assertEqual(
+            chunker.feed("Natürlich, der BMW E sechsundvierzig ist sehr bekannt,"),
+            [],
+        )
+        now[0] = 1.0
+        self.assertEqual(
+            chunker.feed(" besonders für sein ausgewogenes Fahrverhalten."),
+            [
+                "Natürlich, der B M W E sechsundvierzig ist sehr bekannt, "
+                "besonders für sein ausgewogenes Fahrverhalten."
+            ],
+        )
+
+    def test_sentence_mode_emits_short_complete_sentence(self):
+        chunker = SpeechChunker(self.config(sentence_chunks_only=True))
+        self.assertEqual(chunker.feed("Mir geht es gut."), ["Mir geht es gut."])
+
+    def test_complete_response_keeps_short_reply_in_one_chunk(self):
+        chunker = SpeechChunker(self.config(response_chunk_max_words=55))
+        chunks = chunker.complete_response(
+            "Hi, mir geht es gut. Der BMW E46 wurde 1998 vorgestellt. "
+            "Quelle: https://example.test/bmw"
+        )
+        self.assertEqual(len(chunks), 1)
+        self.assertIn("B M W E sechsundvierzig", chunks[0])
+        self.assertNotIn("Quelle", chunks[0])
+        self.assertNotIn("http", chunks[0])
+
+    def test_complete_response_groups_long_text_at_sentence_boundaries(self):
+        chunker = SpeechChunker(self.config(response_chunk_max_words=12))
+        chunks = chunker.complete_response(
+            "Der erste vollständige Satz enthält einige natürliche Wörter. "
+            "Der zweite vollständige Satz bleibt mit dem ersten verbunden. "
+            "Der dritte vollständige Satz beginnt den nächsten Abschnitt."
+        )
+        self.assertEqual(len(chunks), 3)
+        self.assertTrue(all(chunk.endswith(".") for chunk in chunks))
+
+    def test_markdown_code_urls_and_tables_are_not_read_raw(self):
+        text = "**Hallo** [Doku](https://example.test)\n| A | B |\n```python\nprint(1)\n```"
+        spoken = sanitize_for_speech(text)
+        self.assertIn("Hallo Doku", spoken)
+        self.assertNotIn("https", spoken)
+        self.assertNotIn("print", spoken)
+        self.assertNotIn("|", spoken)
+
+
+class AudioQueueTest(unittest.TestCase):
+    def test_audio_queue_writes_and_can_be_interrupted(self):
+        received: list[bytes] = []
+        heard = threading.Event()
+        player = AudioPlayer(sink=lambda pcm, _rate: (received.append(pcm), heard.set()))
+        player.begin(1)
+        player.enqueue(1, b"\x01\x00" * 20, 24_000)
+        self.assertTrue(heard.wait(1.0))
+        player.stop(1)
+        player.enqueue(1, b"\x02\x00" * 20, 24_000)
+        time.sleep(0.05)
+        player.shutdown()
+        self.assertEqual(received, [b"\x01\x00" * 20])
+
+
+class VoiceServiceTest(unittest.TestCase):
+    def test_disabled_service_does_not_spawn_worker(self):
+        service = VoiceService(VoiceConfig(enabled=False))
+        self.assertFalse(service.start())
+        self.assertIsNone(service.start_response())
+
+    def test_clean_chunks_are_queued_and_stop_is_sent(self):
+        with tempfile.TemporaryDirectory() as directory:
+            reference = Path(directory, "eva.wav")
+            reference.write_bytes(b"RIFF")
+            audio = Mock()
+            service = VoiceService(
+                VoiceConfig(
+                    enabled=True,
+                    engine="xtts_v2",
+                    references=(reference,),
+                    first_chunk_min_words=5,
+                    first_chunk_target_words=8,
+                ),
+                project_root=Path(directory),
+                audio_player=audio,
+            )
+            service._ready = True
+            sent: list[tuple[str, dict]] = []
+            service._send = lambda command, **values: sent.append((command, values)) or True
+            request_id = service.start_response()
+            service.feed_text("**Ja**, das können wir jetzt gemeinsam machen. ")
+            self.assertFalse(any(command == "synthesize" for command, _ in sent))
+            service.finish_response()
+            speech = [values["text"] for command, values in sent if command == "synthesize"]
+            self.assertEqual(speech, ["Ja, das können wir jetzt gemeinsam machen."])
+            service._active_id = request_id
+            service.stop()
+            self.assertIn(("stop", {"request_id": request_id}), sent)
+            audio.stop.assert_called()
+
+    def test_low_vram_config_is_read(self):
+        with patch.dict(os.environ, {"EVA_TTS_LOW_VRAM_MODE": "true"}, clear=False):
+            self.assertTrue(VoiceConfig.from_env().low_vram_mode)
+
+
+class SpeakerCacheTest(unittest.TestCase):
+    def test_cache_fingerprint_changes_with_reference(self):
+        with tempfile.TemporaryDirectory() as directory:
+            reference = Path(directory, "eva.wav")
+            reference.write_bytes(b"first")
+            engine = XTTSEngine(
+                model_name="xtts", references=[reference], language="de", device="cpu",
+                cache_dir=Path(directory, "cache"), cache_speaker=True,
+                low_vram_mode=True, stream_chunk_size=20,
+            )
+            first = engine._fingerprint()
+            reference.write_bytes(b"second version")
+            self.assertNotEqual(first, engine._fingerprint())
+
+    def test_cuda_unavailable_has_clear_error(self):
+        fake_torch = Mock()
+        fake_torch.cuda.is_available.return_value = False
+        engine = XTTSEngine(
+            model_name="xtts", references=[], language="de", device="cuda",
+            cache_dir=Path("cache"), cache_speaker=False,
+            low_vram_mode=True, stream_chunk_size=20,
+        )
+        with self.assertRaisesRegex(RuntimeError, "CUDA ist nicht verfügbar"):
+            engine._device(fake_torch)
+
+
+if __name__ == "__main__":
+    unittest.main()

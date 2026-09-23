@@ -1,5 +1,7 @@
 # EVA
 
+Lokale XTTS-v2-Sprachausgabe und Streaming: [docs/VOICE.md](docs/VOICE.md)
+
 EVA ist ein modularer, lokal betriebener Python-Assistent mit Ollama, semantischem Intent-Routing, Memory, Websuche und PostgreSQL/pgvector-RAG. Antworten werden im Terminal gestreamt und danach vollständig in History/Memory gespeichert.
 
 Der Sentry-PC ist bewusst ein getrenntes Projekt und nicht Bestandteil dieses Repositories. EVA stellt dafür ausschließlich die lokalen, token-geschützten Gegenstellen `/health`, `/presence` und `/shutdown` bereit. Ein kopierfertiger Implementierungsauftrag liegt in `docs/SENTRY_PC_PROMPT.md`. Der optionale Desktop-Agent ergänzt Schreibtisch-Präsenz; Gesichtserkennung ist ausdrücklich kein Authentifizierungsfaktor für kritische Aktionen.
@@ -32,4 +34,4 @@ python3 -m desktop_agent.main
 python3 -m unittest discover -s tests -v
 ```
 
-Weitere Details: [Architektur](docs/ARCHITECTURE.md), [RAG](docs/RAG.md), [Sentry-PC-Prompt](docs/SENTRY_PC_PROMPT.md), [Visual Cortex](docs/VISUAL_CORTEX.md), [Installation](docs/INSTALL.md).
+Weitere Details: [Architektur](docs/ARCHITECTURE.md), [RAG](docs/RAG.md), [Text-to-Speech](docs/TTS.md), [Sentry-PC-Prompt](docs/SENTRY_PC_PROMPT.md), [Visual Cortex](docs/VISUAL_CORTEX.md), [Präsenz-Automation](docs/PRESENCE_AUTOMATION.md), [Installation](docs/INSTALL.md).
