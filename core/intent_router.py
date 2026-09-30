@@ -43,6 +43,13 @@ CONTEXT_RESET_PATTERNS = (
     CONVERSATIONAL_PATTERNS[5],
 )
 
+STORY_PATTERNS = (
+    r"\b(?:märchen|maerchen|gutenachtgeschichte|gute[- ]nacht[- ]geschichte)\b",
+    r"\b(?:brüder|gebrüder|brueder|gebrueder)\s+grimm?\b",
+    r"\berzähl\w*\b.{0,80}\b(?:eine|eine kurze|eine kleine)\s+geschichte\b",
+    r"\b(?:eine|eine kurze|eine kleine)\s+geschichte\b.{0,80}\berzähl\w*\b",
+)
+
 ROUTER_PROMPT = r"""
 Du bist EVAs Intent-Router. Du beantwortest die Benutzerfrage NICHT.
 Du entscheidest nur, welche Datenquellen EVA vor der eigentlichen Antwort braucht.
@@ -147,11 +154,13 @@ class IntentRouter:
         history_messages: int = 6,
         max_dossiers: int = 20,
         keep_alive: str = "30m",
+        num_ctx: int = 2048,
     ) -> None:
         self.model = model
         self.history_messages = history_messages
         self.max_dossiers = max_dossiers
         self.keep_alive = keep_alive
+        self.num_ctx = max(512, int(num_ctx))
 
     def route(
         self,
@@ -161,7 +170,9 @@ class IntentRouter:
         conversation_context: dict[str, Any] | None = None,
         memory_index: list[dict[str, Any]] | None = None,
     ) -> IntentDecision:
-        fast = self._fast_route(user_message)
+        """Ordnet einer Nachricht die passende Datenquelle oder NONE zu."""
+        conversation_context = conversation_context or {}
+        fast = self._fast_route(user_message, conversation_context)
         if fast is not None:
             return fast
         if ollama is None:
@@ -175,7 +186,7 @@ class IntentRouter:
         payload = self._build_payload(
             user_message,
             history=history or [],
-            conversation_context=conversation_context or {},
+            conversation_context=conversation_context,
             memory_index=memory_index or [],
         )
 
@@ -198,7 +209,9 @@ class IntentRouter:
                         "temperature": 0.0,
                         "top_p": 0.75,
                         "num_predict": 220,
+                        "num_ctx": self.num_ctx,
                     },
+                    think=False,
                     stream=False,
                     keep_alive=self.keep_alive,
                 )
@@ -211,7 +224,9 @@ class IntentRouter:
                         "temperature": 0.0,
                         "top_p": 0.75,
                         "num_predict": 220,
+                        "num_ctx": self.num_ctx,
                     },
+                    think=False,
                     stream=False,
                     keep_alive=self.keep_alive,
                 )
@@ -238,6 +253,7 @@ class IntentRouter:
 
     @staticmethod
     def is_conversational(user_message: str) -> bool:
+        """Erkennt kurze Unterhaltung, die keine externe Quelle benötigt."""
         lowered = " ".join(user_message.strip().split()).casefold()
         return any(
             re.fullmatch(pattern + r"[?!.]*", lowered)
@@ -246,6 +262,7 @@ class IntentRouter:
 
     @staticmethod
     def resets_context(user_message: str) -> bool:
+        """Erkennt Nachrichten, die ein neues Gesprächsthema beginnen."""
         lowered = " ".join(user_message.strip().split()).casefold()
         return any(
             re.fullmatch(pattern + r"[?!.]*", lowered)
@@ -253,25 +270,53 @@ class IntentRouter:
         )
 
     @staticmethod
-    def _fast_route(user_message: str) -> IntentDecision | None:
-        """Only unambiguous intents bypass the semantic model."""
+    def is_story_request(user_message: str) -> bool:
+        """Erkennt Erzählwünsche, die keine Webrecherche benötigen."""
+        lowered = " ".join(user_message.strip().split()).casefold()
+        return any(re.search(pattern, lowered) for pattern in STORY_PATTERNS)
+
+    @staticmethod
+    def _fast_route(
+        user_message: str,
+        conversation_context: dict[str, Any] | None = None,
+    ) -> IntentDecision | None:
+        """Leitet nur eindeutige Absichten ohne semantisches Modell weiter."""
         clean = " ".join(user_message.strip().split())
         lowered = clean.casefold()
+        conversation_context = conversation_context or {}
         if IntentRouter.is_conversational(clean):
             return IntentDecision(
                 action="NONE",
                 confidence=1.0,
                 reason="klare Unterhaltung ohne externe Daten",
             )
+        if IntentRouter.is_story_request(clean):
+            return IntentDecision(
+                action="NONE",
+                confidence=1.0,
+                reason="kreativer Erzählwunsch ohne externe Daten",
+            )
+        if re.fullmatch(r"(?:nochmal|noch einmal|wiederhol(?:e das)?)[?!.]*", lowered):
+            if conversation_context.get("last_tool") == "WEATHER":
+                previous = str(
+                    conversation_context.get("last_query")
+                    or conversation_context.get("last_topic")
+                    or ""
+                )
+                return IntentDecision(
+                    action="WEATHER",
+                    query=previous or clean,
+                    location=IntentRouter._weather_location(previous) or "Kissing",
+                    confidence=1.0,
+                    reason="Wiederholung der letzten Wetterabfrage",
+                )
         if re.search(
             r"\b(?:wetter|wettervorhersage|temperatur|regnet|regen|schnee)\b"
-            r"|\bwie (?:warm|kalt)\b",
+            r"|\bwie (?:warm|kalt)\b"
+            r"|\b(?:wie\s+viel|wieviel)\s+grad\b",
             lowered,
         ):
-            location_match = re.search(
-                r"\b(?:in|für)\s+([^?!.]+)", clean, flags=re.IGNORECASE
-            )
-            location = location_match.group(1).strip() if location_match else ""
+            location = IntentRouter._weather_location(clean)
             return IntentDecision(
                 action="WEATHER",
                 query=clean,
@@ -288,6 +333,16 @@ class IntentRouter:
             return IntentDecision(
                 action="WIKIPEDIA", query=overview_query, confidence=0.98,
                 reason="enzyklopädischer Überblick über ein benanntes Thema",
+            )
+        if re.search(
+            r"\b(?:aktuell|derzeit|momentan|neueste\w*|beliebteste\w*|bestseller)\b",
+            lowered,
+        ):
+            return IntentDecision(
+                action="WEB_SEARCH",
+                query=clean,
+                confidence=0.99,
+                reason="aktuelle oder wechselnde Information",
             )
         if re.search(r"\b(suche|recherchiere|schau|prüfe)\b.{0,30}\b(web|internet|online)\b",
                      lowered):
@@ -306,10 +361,47 @@ class IntentRouter:
                      lowered):
             return IntentDecision(action="RAG", query=clean, confidence=0.98,
                                   reason="explizite lokale Dokumentquelle")
+        if re.search(
+            r"^(?:erklär\w*|warum\b|wie funktioniert\b|was (?:ist|sind)\b|"
+            r"was bedeutet\b|welchen unterschied\b|unterschied zwischen\b)",
+            lowered,
+        ):
+            return IntentDecision(
+                action="NONE", confidence=0.98,
+                reason="allgemeine Wissensfrage ohne externe Daten",
+            )
         return None
 
     @staticmethod
+    def _weather_location(message: str) -> str:
+        """Extrahiert nur den Ort, nicht Wörter wie 'aktuell ist'."""
+        clean = " ".join(message.strip().split())
+        match = re.search(
+            r"\bin\s+(.+?)(?=\s+(?:aktuell|gerade|heute|jetzt|zurzeit|momentan)\b|[?!.]|$)",
+            clean,
+            flags=re.IGNORECASE,
+        )
+        if not match:
+            match = re.search(
+                r"\b(?:in|für)\s+([^?!.]+)",
+                clean,
+                flags=re.IGNORECASE,
+            )
+        if not match:
+            return ""
+        location = match.group(1).strip(" ?!.,:")
+        location = re.sub(
+            r"\s+(?:aktuell|gerade|heute|jetzt|zurzeit|momentan)(?:\s+ist)?$",
+            "",
+            location,
+            flags=re.IGNORECASE,
+        )
+        location = location[:1].upper() + location[1:]
+        return location[:120]
+
+    @staticmethod
     def _encyclopedic_query(message: str) -> str:
+        """Extrahiert das Thema einer allgemeinen Wissensfrage."""
         patterns = (
             r"\b(?:etwas|was|infos?|informationen?|fakten)\s+(?:über|zu)\s+"
             r"(?:(?:den|dem|der|die|das)\s+)?(.+?)(?:\s+erzählen)?[?!.]*$",
@@ -324,6 +416,7 @@ class IntentRouter:
 
     @staticmethod
     def _explicit_web_query(message: str) -> str:
+        """Entfernt Befehlswörter aus einem ausdrücklichen Suchauftrag."""
         query = message.strip()
         query = re.sub(
             r"^(?:(?:kannst|könntest|würdest) du\s+)?(?:bitte\s+)?"
@@ -351,6 +444,7 @@ class IntentRouter:
         conversation_context: dict[str, Any],
         memory_index: list[dict[str, Any]],
     ) -> dict[str, Any]:
+        """Begrenzt Verlauf und Memory-Index für den semantischen Router."""
         clean_history: list[dict[str, str]] = []
 
         for item in history[-self.history_messages :]:
@@ -412,6 +506,7 @@ class IntentRouter:
             return None
 
     def _parse(self, raw: str) -> IntentDecision:
+        """Validiert die JSON-Modellausgabe und baut eine IntentDecision."""
         data = self._extract_json(raw)
         if not data:
             return IntentDecision(

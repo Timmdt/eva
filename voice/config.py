@@ -82,6 +82,7 @@ class VoiceConfig:
 
     @classmethod
     def from_env(cls) -> "VoiceConfig":
+        """Liest alle aktiven Voice-Werte aus den Umgebungsvariablen."""
         output = os.getenv("EVA_TTS_OUTPUT_FILE", "").strip()
         return cls(
             enabled=_env_bool("EVA_TTS_ENABLED", False),
@@ -144,6 +145,7 @@ class VoiceConfig:
         )
 
     def resolved(self, project_root: Path) -> "VoiceConfig":
+        """Löst relative Voice-Pfade gegen das Projektverzeichnis auf."""
         def local(path: Path) -> Path:
             return path if path.is_absolute() else project_root / path
 

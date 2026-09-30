@@ -4,16 +4,21 @@
 
 ```text
 CLI -> EVA.receive_stream
-    -> direkte Module
-    -> IntentRouter (kleines lokales Modell)
-       -> optional WebSearch / Memory / RAG
-    -> kompakter Prompt
-    -> Ollama stream=True + keep_alive
-    -> Terminal-Stream
-    -> vollständige History/Memory
+    |- kurze feste Antworten oder direkte Module
+    `- IntentRouter (kleines lokales Modell)
+       |- optional: WebSearch / Wikipedia / Memory / RAG
+       |- Wikipedia-Überblick -> direkte, gekürzte Quellenantwort
+       `- sonst -> kompakter Prompt -> lokales Ollama-Modell
+                    |- Textausgabe im Terminal
+                    `- VoiceService -> XTTS-Worker -> Audioausgabe/Datei
+    -> vollständige Antwort in History/Memory
 ```
 
 Der Router kennt `NONE`, Webaktionen, `MEMORY`, `RAG`, `WEB_SEARCH_MEMORY` und `WEB_SEARCH_RAG`. Damit wird pgvector nur bei dokumentbezogenen Anfragen angesprochen. `core.activity` markiert aktive Anfragen und Ingestion; die Shutdown-Logik nutzt dieselben Zustände als Inhibitoren.
+
+## Laufende Prozesse
+
+`main.py` ist der Hauptprozess. Ollama läuft als eigener lokaler Dienst; die Sprachausgabe startet zusätzlich einen dauerhaften XTTS-Unterprozess, damit das Modell nicht für jeden Satz neu geladen wird. Der Hauptprozess übergibt Text über JSON-Zeilen an den Worker und erhält Audiodaten zurück. Ein Neustart von EVA ist deshalb nötig, wenn Voice-Werte aus `.env` geändert wurden.
 
 ## RAG
 

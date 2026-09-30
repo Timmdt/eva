@@ -10,7 +10,7 @@ from voice.metrics import nvidia_memory_mb
 
 
 def _arguments() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Benchmark Qwen streaming through EVA into XTTS.")
+    parser = argparse.ArgumentParser(description="Benchmark LLM streaming through EVA into XTTS.")
     parser.add_argument(
         "message", nargs="?",
         default="Erkläre mir in drei kurzen Sätzen, wie EVA Sprache parallel erzeugt.",
@@ -35,7 +35,7 @@ def main() -> int:
         eva._route_intent = lambda _message: IntentDecision(action="NONE")
         eva._execute_intent = lambda _decision, _message: (None, None)
     if not eva.warm_llm():
-        print("Qwen-Warmup fehlgeschlagen.")
+        print("LLM-Warmup fehlgeschlagen.")
         return 1
     qwen_gpu = nvidia_memory_mb()
     if not eva.start_voice():

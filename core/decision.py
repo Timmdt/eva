@@ -8,21 +8,29 @@ import re
 import ollama
 
 
+def _llm_num_ctx() -> int:
+    """Return the shared Ollama context size configured for EVA."""
+    try:
+        return max(512, int(os.getenv("EVA_LLM_NUM_CTX", "2048")))
+    except ValueError:
+        return 4096
+
+
 class EVADecisionEngine:
     """
-    Ein einziger Qwen-Call entscheidet:
+    Ein einziger lokaler LLM-Call entscheidet:
       - answer
       - search
 
     Wenn search:
       zusätzlich eine saubere Suchanfrage.
 
-    Dadurch wird Qwen nicht zweimal hintereinander geladen.
+    Dadurch wird das LLM nicht zweimal hintereinander aufgerufen.
     """
 
     def __init__(
         self,
-        model: str = "qwen2.5:1.5b",
+        model: str = "gemma4:e2b",
     ) -> None:
         self.model = model
 
@@ -137,9 +145,10 @@ Für Recherche:
                     "temperature": 0.0,
                     "top_p": 0.9,
                     "repeat_penalty": 1.1,
-                    "num_ctx": 2048,
+                    "num_ctx": _llm_num_ctx(),
                 },
                 format="json",
+                think=False,
                 stream=False,
                 keep_alive=os.getenv("EVA_OLLAMA_KEEP_ALIVE", "30m"),
             )

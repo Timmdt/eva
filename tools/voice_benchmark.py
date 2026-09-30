@@ -16,7 +16,7 @@ TEXTS = [
     "Hallo, schön dich zu sehen.",
     "Ich habe die aktuellen Informationen geprüft und dabei etwas Interessantes gefunden.",
     (
-        "Die RTX 2070 besitzt acht Gigabyte Grafikspeicher. EVA hält Qwen und XTTS "
+        "Die RTX 2070 besitzt acht Gigabyte Grafikspeicher. EVA hält Gemma und XTTS "
         "gleichzeitig geladen, verarbeitet die Antwort in natürlichen Abschnitten und "
         "gibt fertige Audioblöcke sofort an die lokale Wiedergabe weiter."
     ),

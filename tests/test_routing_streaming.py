@@ -19,11 +19,49 @@ class RoutingStreamingTest(unittest.TestCase):
         self.assertEqual(decision.action, "RAG")
         self.assertGreater(decision.confidence, 0.9)
 
+    def test_general_knowledge_question_skips_model_router(self):
+        router = IntentRouter("unused")
+        decision = router.route("Warum ändern Blätter im Herbst ihre Farbe?")
+        self.assertEqual(decision.action, "NONE")
+        self.assertGreater(decision.confidence, 0.9)
+
     def test_encyclopedic_overview_uses_wikipedia_with_clean_subject(self):
         router = IntentRouter("unused")
         decision = router.route("kannst du mir was über dem BMW E46 erzählen")
         self.assertEqual(decision.action, "WIKIPEDIA")
         self.assertEqual(decision.query, "BMW E46")
+
+    def test_story_requests_never_trigger_web_or_wikipedia(self):
+        router = IntentRouter("unused")
+        requests = (
+            "Kannst du mir eine Geschichte von den Brüdern Grimm erzählen?",
+            "Kannst du mir eine Gute-Nacht-Geschichte erzählen?",
+            "Erzähl mir bitte ein Märchen.",
+            "Kannst du mir nochmal eine erzählen, am besten eine von Gebrüder Grim?",
+        )
+        for request in requests:
+            with self.subTest(request=request):
+                decision = router.route(request)
+                self.assertEqual(decision.action, "NONE")
+                self.assertEqual(decision.confidence, 1.0)
+
+    def test_story_mode_discards_polluted_answer_history(self):
+        eva = EVA.__new__(EVA)
+        eva.cfg = {"profile_memory_isolation": False}
+        eva._get_current_time = Mock(return_value=None)
+        eva._build_runtime_context = Mock(return_value="runtime")
+        eva._build_relevant_memory_hint = Mock(return_value=None)
+        eva._build_message_history = Mock(return_value=[
+            {"role": "assistant", "content": "Schlechte alte Antwort mit Quellen"},
+        ])
+
+        messages = eva._build_messages(
+            "Kannst du mir eine Geschichte von den Brüdern Grimm erzählen?"
+        )
+        combined = "\n".join(message["content"] for message in messages)
+        self.assertIn("ERZÄHLMODUS", combined)
+        self.assertNotIn("Schlechte alte Antwort", combined)
+        eva._build_message_history.assert_not_called()
 
     def test_explicit_tuning_search_preserves_meaning(self):
         router = IntentRouter("unused")
@@ -62,6 +100,36 @@ class RoutingStreamingTest(unittest.TestCase):
         self.assertIn("vierte Generation", output)
         self.assertIn("https://de.wikipedia.org/wiki/BMW_E46", output)
         eva._chat_stream.assert_not_called()
+
+    def test_weather_result_bypasses_language_model(self):
+        web_data = (
+            "[System-Meldung: Live-Web-Daten geladen]\n\nWETTER\n"
+            "Ort: Kissing\nTemperatur: 17 °C\nGefühlt: 16 °C\n"
+            "Wetter: Leicht bewölkt\nLuftfeuchtigkeit: 62 %\n"
+            "Wind: 9 km/h\nQuelle: wttr.in"
+        )
+        eva = EVA.__new__(EVA)
+        eva._chat_stream = Mock(side_effect=AssertionError("LLM darf nicht laufen"))
+        output = "".join(eva.generate_response_stream("Wie warm ist es?", web_data=web_data))
+        self.assertIn("Kissing", output)
+        self.assertIn("17 °C", output)
+        self.assertIn("62 %", output)
+        self.assertIn("wttr.in", output)
+        eva._chat_stream.assert_not_called()
+
+    def test_weather_failure_is_explicit_and_bypasses_language_model(self):
+        web_data = (
+            "WETTER_FEHLER\nOrt: Kissing\n"
+            "Fehler: Der Wetterdienst ist nicht erreichbar."
+        )
+        eva = EVA.__new__(EVA)
+        eva._chat_stream = Mock(side_effect=AssertionError("LLM darf nicht laufen"))
+        output = "".join(eva.generate_response_stream("nochmal", web_data=web_data))
+        self.assertIn("Wetterskript", output)
+        self.assertIn("nicht erreichbar", output)
+        self.assertNotIn("penguin", output.casefold())
+        eva._chat_stream.assert_not_called()
+
 
     def test_general_web_prompt_is_spoken_friendly(self):
         eva = EVA(run_module_tests=False)

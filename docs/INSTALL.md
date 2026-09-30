@@ -8,8 +8,9 @@ sudo apt install python3-venv postgresql postgresql-contrib libpq-dev
 python3 -m venv .venv
 . .venv/bin/activate
 pip install -r requirements.txt
-ollama pull qwen2.5:3b-instruct
-ollama pull qwen2.5:1.5b
+ollama pull gemma4:e2b
+# Optional für den späteren Desktop-Agenten:
+ollama pull maternion/mai-ui:2b
 ollama pull nomic-embed-text
 cp .env.example .env
 ```

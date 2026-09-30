@@ -192,6 +192,15 @@ class WebSearchModule(ModuleBase):
 
         except Exception as exc:
             logger.exception("WebSearchCore.execute fehlgeschlagen.")
+            if action == "WEATHER":
+                weather_location = (location or query).strip() or "Kissing"
+                return {
+                    "text": (
+                        "WETTER_FEHLER\n"
+                        f"Ort: {weather_location}\n"
+                        f"Fehler: {exc}"
+                    )
+                }
             return {
                 "text": (
                     "[System-Meldung: Live-Web-Daten geladen]\n\n"
@@ -588,7 +597,11 @@ class WebSearchModule(ModuleBase):
         location = location.strip() or "Kissing"
         data = self.weather(location)
         if not data:
-            return f"Keine Wetterdaten für '{location}' erhalten."
+            return (
+                "WETTER_FEHLER\n"
+                f"Ort: {location}\n"
+                "Fehler: Der Wetterdienst lieferte keine aktuellen Daten."
+            )
         return (
             "WETTER\n"
             f"Ort: {data['location']}\n"
@@ -642,7 +655,11 @@ class WebSearchModule(ModuleBase):
         location = self._extract_weather_location(message)
         data = self.weather(location)
         if not data:
-            return f"Keine Wetterdaten für '{location}' erhalten."
+            return (
+                "WETTER_FEHLER\n"
+                f"Ort: {location}\n"
+                "Fehler: Der Wetterdienst lieferte keine aktuellen Daten."
+            )
         return (
             "WETTER\n"
             f"Ort: {data['location']}\n"

@@ -3,6 +3,7 @@ import importlib
 import json
 import logging
 import re
+import threading
 import time
 from collections.abc import Iterator
 from typing import Any
@@ -51,6 +52,11 @@ except ImportError:
     from activity import activity_registry
 
 try:
+    from .storytelling import local_story_response
+except ImportError:
+    from storytelling import local_story_response
+
+try:
     from .intent_router import IntentRouter, IntentDecision
 except ImportError:
     from intent_router import IntentRouter, IntentDecision
@@ -63,7 +69,7 @@ DEFAULT_MODULE_PATHS = [
 ]
 
 DEFAULT_TIMEZONE = "Europe/Berlin"
-DEFAULT_MODEL = "mistral-nemo:12b-instruct-2407-q4_K_S"
+DEFAULT_MODEL = "gemma4:e2b"
 
 # Tags, die EVA intern anfordern darf.
 LOAD_DOSSIER_RE = re.compile(r"\[LOAD_DOSSIER:\s*([^\]]+?)\s*\]")
@@ -152,6 +158,7 @@ Diese Tags sind interne Anweisungen. Verwende sie nur, wenn sie wirklich benöti
 # Optionaler Mini-Zusatz aus der Config.
 # Die Persönlichkeit wird nicht jedes Mal als langer Fließtext übertragen.
 def _build_personality_state(config: dict[str, Any]) -> str:
+    """Verdichtet die Persönlichkeitswerte für den System-Prompt."""
     p = config.get("personality", {}) or {}
 
     def value(key: str, fallback: float) -> float:
@@ -180,6 +187,7 @@ class ModuleManager:
 
     @classmethod
     def from_config(cls, config: dict[str, Any], eva_name: str) -> "ModuleManager":
+        """Importiert und erstellt alle konfigurierten Module."""
         module_paths = config.get("modules", DEFAULT_MODULE_PATHS)
         loaded: list[ModuleBase] = []
 
@@ -292,7 +300,7 @@ class ModuleManager:
 class EVA:
     """
     EVA-Kern mit:
-    - lokalem Ollama/Mistral-Nemo
+    - lokalem Ollama-Modell
     - kleinem System-Prompt
     - begrenzter Chat-History
     - RAG
@@ -302,9 +310,13 @@ class EVA:
     """
 
     def __init__(self, run_module_tests: bool | None = None) -> None:
+        """Lädt Konfiguration, Zustand, Module, Wissen und Sprachausgabe."""
         self.cfg = EVA_CONFIG
         self.name = str(self.cfg.get("name", "EVA"))
         self.voice = VoiceService()
+        # Terminal und Weboberfläche dürfen nie gleichzeitig denselben
+        # Modell-/Sprachstream verändern.
+        self._interaction_lock = threading.Lock()
         self.last_performance: dict[str, float | int] = {}
         self.model = str(self.cfg.get("model", DEFAULT_MODEL))
         self.web_answer_model = str(
@@ -312,7 +324,10 @@ class EVA:
         )
 
         self.max_history_messages = int(
-            self.cfg.get("max_history_messages", 12)
+            self.cfg.get("max_history_messages", 8)
+        )
+        self.max_history_chars = int(
+            self.cfg.get("max_history_chars", 6000)
         )
         self.rag_top_k = int(self.cfg.get("rag_top_k", 2))
         self.max_context_chars = int(
@@ -339,6 +354,7 @@ class EVA:
                 self.cfg.get("router_max_dossiers", 20)
             ),
             keep_alive=str(self.cfg.get("ollama_keep_alive", "30m")),
+            num_ctx=int(self.cfg.get("llm_num_ctx", 2048)),
         )
 
         self.rag = self._init_rag()
@@ -376,6 +392,7 @@ class EVA:
 
     @staticmethod
     def _normalize_history(history: list[dict]) -> list[Message]:
+        """Überführt alte und neue Verlaufsformate in ein einheitliches Schema."""
         normalized: list[Message] = []
 
         for item in history or []:
@@ -431,6 +448,7 @@ class EVA:
         return history[-self.max_history_messages :]
 
     def _build_message_history(self) -> list[Message]:
+        """Wählt vollständige Benutzer-Antwort-Paare für den Modellkontext."""
         history = self._normalize_history(
             self.state.get("history", [])
         )
@@ -445,7 +463,18 @@ class EVA:
             elif item["role"] == "assistant" and pending_user is not None:
                 paired.extend([pending_user, item])
                 pending_user = None
-        return self._trim_history(paired)
+        selected = self._trim_history(paired)
+        if self.max_history_chars <= 0:
+            return []
+
+        # Kleine lokale Modelle verlieren bei langen alten Antworten schnell
+        # den Fokus. Entferne deshalb immer ganze, alte Gesprächspaare.
+        while (
+            len(selected) > 2
+            and sum(len(item["content"]) for item in selected) > self.max_history_chars
+        ):
+            selected = selected[2:]
+        return selected
 
     # ------------------------------------------------------------------
     # Time / modules / runtime context
@@ -597,8 +626,9 @@ class EVA:
                 options={
                     "temperature": 0.45,
                     "top_p": 0.90,
-                    "num_ctx": int(self.cfg.get("llm_num_ctx", 4096)),
+                    "num_ctx": int(self.cfg.get("llm_num_ctx", 2048)),
                 },
+                think=bool(self.cfg.get("llm_thinking", False)),
                 keep_alive=str(self.cfg.get("ollama_keep_alive", "30m")),
             )
 
@@ -933,8 +963,9 @@ class EVA:
                 "top_p": top_p,
                 "repeat_penalty": 1.15,
                 "repeat_last_n": 64,
-                "num_ctx": int(self.cfg.get("llm_num_ctx", 4096)),
+                "num_ctx": int(self.cfg.get("llm_num_ctx", 2048)),
             },
+            think=bool(self.cfg.get("llm_thinking", False)),
             stream=False,
             keep_alive=str(self.cfg.get("ollama_keep_alive", "30m")),
         )
@@ -961,12 +992,13 @@ class EVA:
         selected_model = model or self.model
         options = {"temperature": temperature, "top_p": top_p,
                    "repeat_penalty": 1.15, "repeat_last_n": 64,
-                   "num_ctx": int(self.cfg.get("llm_num_ctx", 4096))}
+                   "num_ctx": int(self.cfg.get("llm_num_ctx", 2048))}
         try:
             stream = ollama.chat(
                 model=selected_model,
                 messages=messages,
                 options=options,
+                think=bool(self.cfg.get("llm_thinking", False)),
                 stream=True,
                 keep_alive=str(self.cfg.get("ollama_keep_alive", "30m")),
             )
@@ -982,6 +1014,7 @@ class EVA:
                 model=self.model,
                 messages=messages,
                 options=options,
+                think=bool(self.cfg.get("llm_thinking", False)),
                 stream=True,
                 keep_alive=str(self.cfg.get("ollama_keep_alive", "30m")),
             )
@@ -1140,6 +1173,7 @@ class EVA:
         return index
 
     def _route_intent(self, message: str) -> IntentDecision:
+        """Bestimmt die benötigte Datenquelle für die aktuelle Nachricht."""
         return self.intent_router.route(
             message,
             history=self._build_message_history(),
@@ -1196,6 +1230,13 @@ class EVA:
                 location=decision.location,
                 url=decision.url,
             )
+            if decision.action == "WEATHER" and not web_data:
+                location = decision.location.strip() or "Kissing"
+                web_data = (
+                    "WETTER_FEHLER\n"
+                    f"Ort: {location}\n"
+                    "Fehler: Das lokale Wetterskript lieferte keine Daten."
+                )
 
         if decision.action in {
             "MEMORY",
@@ -1247,7 +1288,9 @@ class EVA:
         dossier_context: str | None = None,
         rag_context: str | None = None,
     ) -> list[Message]:
+        """Baut Systemkontext, History, Quellen und Benutzerfrage zum Prompt zusammen."""
         current_time = self._get_current_time()
+        story_request = IntentRouter.is_story_request(user_msg)
 
         messages: list[Message] = [
             {
@@ -1264,6 +1307,20 @@ class EVA:
 
         if self.cfg.get("profile_memory_isolation"):
             messages.append({"role": "system", "content": self._profile_access().context_note})
+
+        if story_request:
+            messages.append({
+                "role": "system",
+                "content": (
+                    "ERZÄHLMODUS: Der Benutzer möchte eine zusammenhängende Geschichte, "
+                    "keine Recherche und keine Erklärung über Autoren. Verwende keine Quellen, "
+                    "Links oder Meta-Kommentare. Wenn die Brüder Grimm genannt werden, erzähle "
+                    "ein tatsächlich bekanntes Märchen aus ihrer Sammlung statt eine Biografie "
+                    "oder eine neu erfundene Geschichte über die Brüder. Schreibe natürliches, "
+                    "grammatisch sauberes Deutsch in vollständigen Sätzen und mit ruhigem "
+                    "Erzählrhythmus. Beginne direkt mit einem passenden Titel und der Handlung."
+                ),
+            })
 
         # Nur relevante Projekt-Hinweise, niemals kompletter Index.
         memory_hint = self._build_relevant_memory_hint(
@@ -1324,7 +1381,7 @@ class EVA:
                 ),
             }
 
-        if not IntentRouter.resets_context(user_msg):
+        if not IntentRouter.resets_context(user_msg) and not story_request:
             messages.extend(self._build_message_history())
 
         # Aktuelle Tooldaten müssen unmittelbar vor der Benutzerfrage stehen,
@@ -1354,6 +1411,7 @@ class EVA:
 
     @staticmethod
     def _quick_conversation_response(message: str) -> str | None:
+        """Beantwortet eine eindeutig erkannte Begrüßung ohne Modellaufruf."""
         clean = " ".join(message.strip().split()).casefold()
         match = re.fullmatch(
             r"(?:(?:hallo|hi|hey|moin|servus|guten (?:morgen|tag|abend))[,! ]+)?"
@@ -1376,10 +1434,16 @@ class EVA:
         self,
         message: str,
     ) -> str:
+        """Sammelt die gestreamte Antwort und gibt sie als vollständigen Text zurück."""
         return "".join(self.receive_stream(message))
 
     def receive_stream(self, message: str) -> Iterator[str]:
-        """Route, retrieve and stream while collecting the final answer for memory."""
+        """Serialisiert Unterhaltungen aus Terminal, Weboberfläche und Modulen."""
+        with self._interaction_lock:
+            yield from self._receive_stream_unlocked(message)
+
+    def _receive_stream_unlocked(self, message: str) -> Iterator[str]:
+        """Routet die Anfrage, streamt die Antwort und speichert das Gesamtergebnis."""
         message = message.strip()
         if not message:
             yield "Hm?"
@@ -1393,6 +1457,25 @@ class EVA:
             self._append_history(message, quick_response)
             yield quick_response
             return
+
+        story_response = local_story_response(message)
+        if story_response:
+            voice_request = self.voice.start_response()
+            if voice_request is not None:
+                self.voice.feed_text(story_response)
+                self.voice.finish_response()
+            self._update_conversation_context(
+                IntentDecision(
+                    action="NONE",
+                    confidence=1.0,
+                    reason="lokale kuratierte Geschichte",
+                ),
+                message,
+            )
+            self._append_history(message, story_response)
+            yield story_response
+            return
+
         total_started = time.perf_counter()
         voice_request = self.voice.start_response()
         metrics = {"router_ms": 0.0, "tool_ms": 0.0, "rag_ms": 0.0,
@@ -1459,6 +1542,7 @@ class EVA:
 
     @staticmethod
     def _direct_wikipedia_response(web_data: str | None) -> str | None:
+        """Erzeugt aus Wikipedia-Daten eine kurze Antwort ohne LLM."""
         if not web_data or "WIKIPEDIA" not in web_data:
             return None
         summary_match = re.search(
@@ -1478,9 +1562,63 @@ class EVA:
             return f"{summary}\n\nQuelle: {source_match.group(1)}"
         return summary
 
+    @staticmethod
+    def _direct_weather_response(web_data: str | None) -> str | None:
+        """Formatiert das Ergebnis des Wetterskripts ohne einen weiteren LLM-Aufruf."""
+        if not web_data:
+            return None
+
+        def field(name: str) -> str:
+            match = re.search(
+                rf"(?m)^{re.escape(name)}:\s*(.+)$",
+                web_data,
+            )
+            return match.group(1).strip() if match else ""
+
+        if "WETTER_FEHLER" in web_data:
+            location = field("Ort") or "den gewünschten Ort"
+            reason = field("Fehler")
+            detail = f" Technischer Hinweis: {reason}" if reason else ""
+            return (
+                f"Ich konnte das Wetterskript für {location} gerade nicht erfolgreich "
+                f"ausführen.{detail} Bitte versuche es gleich noch einmal."
+            )
+
+        if re.search(r"(?m)^WETTER$", web_data) is None:
+            return None
+
+        location = field("Ort") or "dem gewünschten Ort"
+        temperature = field("Temperatur")
+        feels_like = field("Gefühlt")
+        description = field("Wetter")
+        humidity = field("Luftfeuchtigkeit")
+        wind = field("Wind")
+
+        first = f"In {location}"
+        if temperature:
+            first += f" sind es aktuell {temperature}"
+        if feels_like:
+            first += f", gefühlt {feels_like}"
+        first += "."
+
+        details: list[str] = []
+        if description:
+            details.append(f"Wetterlage: {description}.")
+        if humidity:
+            details.append(f"Luftfeuchtigkeit: {humidity}.")
+        if wind:
+            details.append(f"Wind: {wind}.")
+
+        return " ".join([first, *details, "Quelle: wttr.in"])
+
     def generate_response_stream(self, user_msg: str, web_data: str | None = None,
                                  dossier_context: str | None = None,
                                  rag_context: str | None = None) -> Iterator[str]:
+        """Wählt direkte Quellenantwort oder lokales Modell und streamt den Text."""
+        direct_weather = self._direct_weather_response(web_data)
+        if direct_weather:
+            yield direct_weather
+            return
         direct_wikipedia = self._direct_wikipedia_response(web_data)
         if direct_wikipedia:
             yield direct_wikipedia
@@ -1496,10 +1634,11 @@ class EVA:
             messages = self._build_messages(user_msg, web_data=None,
                                             dossier_context=dossier_context,
                                             rag_context=rag_context)
+        story_request = not web_data and IntentRouter.is_story_request(user_msg)
         stream = iter(self._chat_stream(
             messages,
-            temperature=0.0 if web_data else 0.30,
-            top_p=0.70 if web_data else 0.90,
+            temperature=0.0 if web_data else (0.42 if story_request else 0.30),
+            top_p=0.70 if web_data else (0.88 if story_request else 0.90),
             model=self.web_answer_model if web_data else self.model,
         ))
         if not web_data:
@@ -1819,7 +1958,7 @@ class EVA:
     # ------------------------------------------------------------------
 
     def warm_llm(self) -> bool:
-        """Load the main Ollama model without changing conversation state."""
+        """Lädt das Hauptmodell vor, ohne den Gesprächszustand zu verändern."""
         if ollama is None:
             return False
         started = time.perf_counter()
@@ -1830,24 +1969,27 @@ class EVA:
                 options={
                     "temperature": 0.0,
                     "num_predict": 2,
-                    "num_ctx": int(self.cfg.get("llm_num_ctx", 4096)),
+                    "num_ctx": int(self.cfg.get("llm_num_ctx", 2048)),
                 },
+                think=bool(self.cfg.get("llm_thinking", False)),
                 stream=False,
                 keep_alive=str(self.cfg.get("ollama_keep_alive", "30m")),
             )
             if self.cfg.get("performance_debug"):
                 logging.info(
-                    "Qwen warm: %.1f ms", (time.perf_counter() - started) * 1000.0
+                    "LLM warm: %.1f ms", (time.perf_counter() - started) * 1000.0
                 )
             return True
         except Exception:
-            logging.exception("Qwen-Warmup ist fehlgeschlagen.")
+            logging.exception("LLM-Warmup ist fehlgeschlagen.")
             return False
 
     def start_voice(self) -> bool:
+        """Startet den dauerhaften lokalen XTTS-Worker."""
         return self.voice.start(wait=True)
 
     def voice_status(self) -> dict[str, Any]:
+        """Liefert den aktuellen Zustand der Sprachausgabe."""
         return self.voice.status()
 
     def run_module_tests(self) -> list[tuple[bool, str]]:
@@ -1862,6 +2004,7 @@ class EVA:
         return results
 
     def shutdown(self) -> None:
+        """Beendet Voice und RAG und speichert den letzten Zustand."""
         self.voice.shutdown()
         try:
             run_reflection_and_save()
@@ -1888,6 +2031,7 @@ class EVA:
         return self.startup_message
 
     def speak(self, text: str, *, echo: bool = True) -> None:
+        """Gibt Text optional im Terminal und über die lokale Stimme aus."""
         if echo:
             print(f"{self.name}: {text}")
         self.voice.speak(text)

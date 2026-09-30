@@ -32,11 +32,21 @@ def sanitize_for_speech(
     read_urls: bool = False,
     pronunciation_rules: dict[str, str] | None = None,
 ) -> str:
+    """Bereinigt Modelltext und wendet Ausspracheregeln für TTS an."""
     spoken = str(text or "")
     if not read_urls:
-        spoken = re.sub(r"(?i)\s+(?:quellen?|sources?)\s*:\s*https?:\/\/\S+\s*$", " ", spoken)
-        spoken = re.sub(r"(?im)^\s*(?:quellen?|sources?)\s*:.*$", " ", spoken)
-        spoken = re.sub(r"(?im)^\s*[-*]?\s*https?:\/\/\S+\s*$", " ", spoken)
+        # Quellenblöcke gehören zur Textansicht, nicht in die gesprochene Antwort.
+        # DOTALL entfernt auch Markdown-Links in den Folgezeilen vollständig.
+        spoken = re.sub(
+            r"(?ims)(^|\n|[.!?])\s*(?:quellen?|sources?)\s*:\s*.*\Z",
+            r"\1 ",
+            spoken,
+        )
+        spoken = re.sub(
+            r"(?im)^\s*[-*]?\s*(?:https?:\/\/\S+|\[[^\]]+\]\(https?:\/\/[^)]+\))\s*$",
+            " ",
+            spoken,
+        )
     if read_code:
         spoken = re.sub(r"```(?:\w+)?\s*(.*?)```", r" \1 ", spoken, flags=re.DOTALL)
     else:
@@ -119,6 +129,7 @@ class SpeechChunker:
         return None
 
     def feed(self, fragment: str) -> list[str]:
+        """Sammelt Stream-Text und gibt vollständig sprechbare Abschnitte frei."""
         if not fragment:
             return []
         if not self.buffer:
@@ -165,6 +176,7 @@ class SpeechChunker:
         return chunks
 
     def complete_response(self, text: str) -> list[str]:
+        """Teilt eine fertige Antwort möglichst nur an Satzgrenzen."""
         spoken = sanitize_for_speech(
             text,
             read_code=self.config.read_code,
@@ -207,6 +219,7 @@ class SpeechChunker:
         return chunks
 
     def flush(self) -> list[str]:
+        """Gibt den letzten Rest des Streaming-Puffers aus und setzt ihn zurück."""
         if not self.buffer.strip():
             self.reset()
             return []

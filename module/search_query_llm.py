@@ -6,6 +6,14 @@ import os
 import ollama
 
 
+def _llm_num_ctx() -> int:
+    """Return the shared Ollama context size configured for EVA."""
+    try:
+        return max(512, int(os.getenv("EVA_LLM_NUM_CTX", "2048")))
+    except ValueError:
+        return 4096
+
+
 class SearchQueryLLM:
     """
     Formuliert aus der natürlichen Benutzerfrage eine
@@ -16,7 +24,7 @@ class SearchQueryLLM:
 
     def __init__(
         self,
-        model: str = "qwen2.5:1.5b",
+        model: str = "gemma4:e2b",
     ) -> None:
         self.model = model
 
@@ -91,7 +99,9 @@ Ausgabe:
                     "temperature": 0.1,
                     "top_p": 0.9,
                     "repeat_penalty": 1.1,
+                    "num_ctx": _llm_num_ctx(),
                 },
+                think=False,
                 stream=False,
                 keep_alive=os.getenv("EVA_OLLAMA_KEEP_ALIVE", "30m"),
             )

@@ -27,15 +27,15 @@ EVA_CONFIG = {
     "name": "EVA",
     "version": "0.1",
 
-    "model": os.getenv("EVA_MODEL", "qwen2.5:3b-instruct"),
+    "model": os.getenv("EVA_MODEL", "gemma4:e2b"),
 
-    "web_answer_model": os.getenv("EVA_WEB_MODEL", os.getenv("EVA_MODEL", "qwen2.5:3b-instruct")),
+    "web_answer_model": os.getenv("EVA_WEB_MODEL", os.getenv("EVA_MODEL", "gemma4:e2b")),
 
-    "controller_model": os.getenv("EVA_ROUTER_MODEL", "qwen2.5:1.5b"),
+    "controller_model": os.getenv("EVA_ROUTER_MODEL", os.getenv("EVA_MODEL", "gemma4:e2b")),
 
-    "router_model": os.getenv("EVA_ROUTER_MODEL", "qwen2.5:1.5b"),
+    "router_model": os.getenv("EVA_ROUTER_MODEL", os.getenv("EVA_MODEL", "gemma4:e2b")),
 
-    "search_query_model": os.getenv("EVA_SEARCH_MODEL", "qwen2.5:1.5b"),
+    "search_query_model": os.getenv("EVA_SEARCH_MODEL", os.getenv("EVA_MODEL", "gemma4:e2b")),
 
     "web_search_max_results": 5,
 
@@ -106,7 +106,8 @@ EVA_CONFIG = {
 
     "timezone": os.getenv("EVA_TIMEZONE", "Europe/Berlin"),
     "run_module_tests_on_start": _env_bool("EVA_RUN_MODULE_TESTS", True),
-    "max_history_messages": _env_int("EVA_MAX_HISTORY_MESSAGES", 12),
+    "max_history_messages": _env_int("EVA_MAX_HISTORY_MESSAGES", 8),
+    "max_history_chars": _env_int("EVA_MAX_HISTORY_CHARS", 6000),
     "max_context_chars": _env_int("EVA_MAX_CONTEXT_CHARS", 12000),
     "rag_top_k": _env_int("EVA_RAG_TOP_K", 4),
     "rag_threshold": _env_float("EVA_RAG_THRESHOLD", 0.45),
@@ -120,7 +121,8 @@ EVA_CONFIG = {
     "rag_pool_max": _env_int("EVA_DB_POOL_MAX", 6),
     "rag_connect_timeout": _env_float("EVA_DB_CONNECT_TIMEOUT", 3.0),
     "ollama_keep_alive": os.getenv("EVA_OLLAMA_KEEP_ALIVE", "30m"),
-    "llm_num_ctx": _env_int("EVA_LLM_NUM_CTX", 4096),
+    "llm_num_ctx": _env_int("EVA_LLM_NUM_CTX", 2048),
+    "llm_thinking": _env_bool("EVA_LLM_THINKING", False),
     "performance_debug": _env_bool("EVA_PERFORMANCE_DEBUG", False),
     "performance_logging": _env_bool("EVA_PERFORMANCE_LOGGING", False),
     "profile_memory_isolation": _env_bool("EVA_PROFILE_MEMORY_ISOLATION", True),

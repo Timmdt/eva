@@ -65,6 +65,7 @@ class VoiceService:
         return self.enabled and self._ready
 
     def start(self, *, wait: bool = True) -> bool:
+        """Startet den XTTS-Unterprozess und wartet optional auf seine Bereitschaft."""
         if not self.enabled:
             return False
         if self._process is not None and self._process.poll() is None:
@@ -219,6 +220,7 @@ class VoiceService:
             return False
 
     def start_response(self) -> int | None:
+        """Bricht alte Audioausgabe ab und öffnet einen neuen Sprachauftrag."""
         if not self.ready:
             return None
         self.stop()
@@ -233,6 +235,7 @@ class VoiceService:
         return request_id
 
     def feed_text(self, fragment: str) -> list[str]:
+        """Nimmt weiteren Antworttext auf und sendet fertige Abschnitte an XTTS."""
         request_id = self._active_id
         if request_id is None:
             return []
@@ -246,6 +249,7 @@ class VoiceService:
         return chunks
 
     def finish_response(self) -> list[str]:
+        """Schließt die Antwort ab und startet die Synthese verbleibender Abschnitte."""
         request_id = self._active_id
         if request_id is None:
             return []
@@ -262,6 +266,7 @@ class VoiceService:
         return chunks
 
     def speak(self, text: str) -> bool:
+        """Spricht einen bereits vollständigen Text als einzelnen Auftrag."""
         if not self.ready and not self.start(wait=True):
             return False
         if self.start_response() is None:
@@ -271,6 +276,7 @@ class VoiceService:
         return True
 
     def stop(self) -> None:
+        """Bricht nur den aktuell laufenden Sprachauftrag ab."""
         request_id = self._active_id
         self.chunker.reset()
         self._response_fragments.clear()
@@ -280,9 +286,11 @@ class VoiceService:
             self._active_id = None
 
     def wait(self, timeout: float | None = None) -> bool:
+        """Wartet, bis die aktuelle Audioausgabe beendet ist."""
         return self.audio.wait(timeout)
 
     def status(self) -> dict[str, Any]:
+        """Liefert Bereitschaft, Gerät, Fehler und Laufzeitmesswerte."""
         gpu = nvidia_memory_mb()
         return {
             "enabled": self.enabled,
@@ -296,6 +304,7 @@ class VoiceService:
         }
 
     def shutdown(self) -> None:
+        """Beendet den Worker und die Audioausgabe vollständig."""
         self.stop()
         self._send("shutdown")
         process = self._process

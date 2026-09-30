@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import platform
+import os
 import subprocess
 from pathlib import Path
 
@@ -12,13 +13,16 @@ def _run(command: list[str], timeout: float = 10.0) -> subprocess.CompletedProce
 
 def main() -> int:
     root = Path(__file__).resolve().parents[1]
+    from core.env_loader import load_env_file
+    load_env_file(root / ".env")
+    model = os.getenv("EVA_MODEL", "gemma4:e2b")
     gpu = _run([
         "nvidia-smi", "--query-gpu=name,memory.total,memory.used,memory.free,driver_version",
         "--format=csv,noheader,nounits",
     ])
     gpu_values = [value.strip() for value in gpu.stdout.splitlines()[0].split(",")] if gpu.returncode == 0 and gpu.stdout.strip() else []
     ollama = _run(["ollama", "ps"])
-    qwen_loaded = any("qwen2.5:3b" in line for line in ollama.stdout.splitlines())
+    model_loaded = any(model in line for line in ollama.stdout.splitlines())
     processes = _run(["ps", "-eo", "args"])
     xtts_loaded = "voice.xtts_worker" in processes.stdout
     python = root / ".venv-xtts/bin/python"
@@ -42,7 +46,7 @@ def main() -> int:
         print(f"NVIDIA driver: {gpu_values[4]}")
     else:
         print("GPU: nicht verfügbar")
-    print(f"Qwen loaded: {'yes' if qwen_loaded else 'no'}")
+    print(f"LLM ({model}) loaded: {'yes' if model_loaded else 'no'}")
     print(f"XTTS loaded: {'yes' if xtts_loaded else 'no'}")
     return 0
 

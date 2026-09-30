@@ -126,6 +126,7 @@ class XTTSEngine:
         return used_mb, total_mb
 
     def load(self) -> dict[str, object]:
+        """Lädt XTTS und berechnet oder lädt die Merkmale der Referenzstimme."""
         import torch
         from TTS.api import TTS
 
@@ -169,6 +170,7 @@ class XTTSEngine:
         }
 
     def warmup(self) -> float:
+        """Erzeugt einen kurzen Testsatz, damit die erste echte Antwort schneller ist."""
         started = time.perf_counter()
         cancel = threading.Event()
         for _chunk in self.stream_pcm("Hallo.", cancel):
@@ -221,6 +223,7 @@ class XTTSEngine:
         return torch.cat((samples[:clean_end], clean_tail))
 
     def _inference_chunks(self, text: str):
+        """Startet XTTS deterministisch im Streaming- oder Qualitätsmodus."""
         self.torch.manual_seed(self.seed)
         if self.device_name.startswith("cuda"):
             self.torch.cuda.manual_seed_all(self.seed)
@@ -252,6 +255,7 @@ class XTTSEngine:
         return (self._trim_isolated_trailing_artifact(audio),)
 
     def stream_pcm(self, text: str, cancel: threading.Event) -> Iterator[bytes]:
+        """Wandelt Text in abbrechbare 16-Bit-PCM-Audioblöcke um."""
         if self.model is None or self.torch is None:
             raise RuntimeError("XTTS ist noch nicht geladen.")
         torch = self.torch
@@ -280,6 +284,7 @@ class XTTSEngine:
         }
 
     def status(self) -> dict[str, object]:
+        """Liefert Modell-, GPU- und Ladeinformationen für die Diagnose."""
         used, total = self._memory()
         return {
             "loaded": self.model is not None,

@@ -16,6 +16,7 @@ from interfaces.presence_automation import (
     PresenceAutomationConfig,
 )
 from interfaces.presence_state import presence_fusion
+from interfaces.web_chat import WebChat
 from core.safe_shutdown import SafeShutdown
 
 
@@ -68,14 +69,52 @@ def handler_factory(
     eva: Any | None = None,
     automation: PresenceAutomation | None = None,
 ) -> type[BaseHTTPRequestHandler]:
+    web_enabled = os.getenv("EVA_WEB_ENABLED", "false").lower() in {
+        "1", "true", "yes", "on",
+    }
+    web = (
+        WebChat(eva, Path(__file__).resolve().parents[1])
+        if web_enabled and eva is not None
+        else None
+    )
+    web_root = Path(__file__).with_name("web")
+    security_headers = {
+        "Content-Security-Policy": (
+            "default-src 'self'; style-src 'self'; script-src 'self'; "
+            "connect-src 'self'; media-src 'self' blob:; img-src 'self' data:; "
+            "object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
+        ),
+        "Referrer-Policy": "no-referrer",
+        "X-Content-Type-Options": "nosniff",
+        "X-Frame-Options": "DENY",
+    }
+
     class HealthHandler(BaseHTTPRequestHandler):
-        def _json(self, status: int, value: dict[str, Any]) -> None:
-            payload = json.dumps(value).encode("utf-8")
+        protocol_version = "HTTP/1.1"
+
+        def _bytes(
+            self,
+            status: int,
+            payload: bytes,
+            content_type: str,
+            *,
+            cache_control: str = "no-store",
+        ) -> None:
             self.send_response(status)
-            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Type", content_type)
             self.send_header("Content-Length", str(len(payload)))
+            self.send_header("Cache-Control", cache_control)
+            for name, value in security_headers.items():
+                self.send_header(name, value)
             self.end_headers()
             self.wfile.write(payload)
+
+        def _json(self, status: int, value: dict[str, Any]) -> None:
+            self._bytes(
+                status,
+                json.dumps(value, ensure_ascii=False).encode("utf-8"),
+                "application/json; charset=utf-8",
+            )
 
         def _authorized(self, env_name: str) -> bool:
             token = os.getenv(env_name, "").strip()
@@ -85,12 +124,111 @@ def handler_factory(
             return hmac.compare_digest(token, supplied)
 
         def do_GET(self) -> None:
-            if self.path != "/health":
+            path = self.path.split("?", 1)[0]
+            if path == "/health":
+                self._json(200, check())
+                return
+            if web is None:
                 self.send_error(404)
                 return
-            self._json(200, check())
+            if path in {"/", "/index.html", "/styles.css", "/app.js"}:
+                filename = "index.html" if path in {"/", "/index.html"} else path[1:]
+                asset = web_root / filename
+                if not asset.is_file():
+                    self.send_error(404)
+                    return
+                content_type = {
+                    ".html": "text/html; charset=utf-8",
+                    ".css": "text/css; charset=utf-8",
+                    ".js": "text/javascript; charset=utf-8",
+                }.get(asset.suffix, "application/octet-stream")
+                self._bytes(
+                    200,
+                    asset.read_bytes(),
+                    content_type,
+                    cache_control=(
+                        "no-store"
+                        if filename == "index.html"
+                        else "public, max-age=3600"
+                    ),
+                )
+                return
+            if path == "/api/status":
+                if not self._authorized("EVA_WEB_TOKEN"):
+                    self._json(401, {"error": "unauthorized"})
+                    return
+                self._json(200, web.status())
+                return
+            if path == "/api/history":
+                if not self._authorized("EVA_WEB_TOKEN"):
+                    self._json(401, {"error": "unauthorized"})
+                    return
+                self._json(200, {"messages": web.history()})
+                return
+            if path.startswith("/api/audio/"):
+                if not self._authorized("EVA_WEB_TOKEN"):
+                    self._json(401, {"error": "unauthorized"})
+                    return
+                audio = web.audio(path.removeprefix("/api/audio/"))
+                if audio is None:
+                    self._json(404, {"error": "audio not found"})
+                    return
+                audio_path, media_type = audio
+                self._bytes(200, audio_path.read_bytes(), media_type)
+                return
+            self.send_error(404)
 
         def do_POST(self) -> None:
+            if self.path == "/api/chat":
+                if web is None:
+                    self.send_error(404)
+                    return
+                if not self._authorized("EVA_WEB_TOKEN"):
+                    self._json(401, {"error": "unauthorized"})
+                    return
+                try:
+                    length = int(self.headers.get("Content-Length", "0"))
+                    if length <= 0 or length > 65_536:
+                        self._json(413, {"error": "request too large"})
+                        return
+                    payload = json.loads(self.rfile.read(length).decode("utf-8"))
+                    message = payload.get("message", "")
+                    if not isinstance(message, str) or not message.strip():
+                        self._json(400, {"error": "message is required"})
+                        return
+                    message = message.strip()
+                    if len(message) > web.max_message_chars:
+                        self._json(413, {"error": "message is too long"})
+                        return
+                except (ValueError, json.JSONDecodeError, UnicodeDecodeError) as exc:
+                    self._json(400, {"error": str(exc)})
+                    return
+                if not web.begin_chat():
+                    self._json(409, {"error": "busy"})
+                    return
+
+                self.send_response(200)
+                self.send_header(
+                    "Content-Type", "application/x-ndjson; charset=utf-8"
+                )
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("X-Content-Type-Options", "nosniff")
+                self.send_header("Connection", "close")
+                self.end_headers()
+                self.close_connection = True
+                connected = True
+                for event in web.events(message):
+                    if not connected:
+                        continue
+                    line = (
+                        json.dumps(event, ensure_ascii=False).encode("utf-8") + b"\n"
+                    )
+                    try:
+                        self.wfile.write(line)
+                        self.wfile.flush()
+                    except (BrokenPipeError, ConnectionResetError):
+                        connected = False
+                return
             if self.path == "/presence":
                 if not self._authorized("EVA_PRESENCE_TOKEN"):
                     self._json(401, {"error": "unauthorized"})

@@ -109,7 +109,7 @@ EVA_TTS_READ_CODE=false
 EVA_TTS_READ_URLS=false
 EVA_AUDIO_DEVICE=
 EVA_AUDIO_VOLUME=0.90
-EVA_LLM_NUM_CTX=4096
+EVA_LLM_NUM_CTX=2048
 EVA_OLLAMA_KEEP_ALIVE=30m
 EVA_PERFORMANCE_DEBUG=false
 ```
@@ -140,35 +140,35 @@ python -m tools.eva_voice_benchmark --turns 10
 Die Werkzeuge geben nur gemessene Werte aus: XTTS-Ladezeit, Conditioning-Zeit,
 Time-to-first-audio, Time-to-first-sound, Real-Time-Factor und VRAM. Der letzte
 Befehl ist der Zehn-Turn-Stresstest. Für den Vergleich des KV-Caches zuerst mit
-`EVA_LLM_NUM_CTX=4096`, danach kontrolliert mit `8192` testen.
+`EVA_LLM_NUM_CTX=2048`, danach kontrolliert mit `4096` testen.
 
 ## RTX 2070 und Low-VRAM-Modus
 
-Die RTX 2070 besitzt 8 GB VRAM. EVA lädt zunächst Qwen mit `num_ctx=4096` und
-danach XTTS. Beide Modelle bleiben geladen. Es wird nicht nach jedem Chunk
-`torch.cuda.empty_cache()` aufgerufen. Audiochunks werden direkt auf CPU
-übertragen und anschließend freigegeben; Speaker-Latents werden wiederverwendet.
+Die RTX 2070 besitzt 8 GB VRAM. EVA lädt Gemma 3 4B Q4 mit `num_ctx=2048` und
+danach XTTS. Hauptantwort, Router, Webantwort und Suchanfrage verwenden dasselbe
+LLM; dadurch wird kein zweites Sprachmodell ein- und ausgelagert. Audiochunks
+werden direkt auf die CPU übertragen und Speaker-Latents wiederverwendet.
 
-Erst wenn der gemeinsame Benchmark tatsächlich OOM meldet, Context reduzieren
-oder einen gemessenen CPU-Offload erwägen. Eine schnellere GPU reduziert Latenz
-und erleichtert Fine-Tuning, verbessert aber nicht automatisch Aussprache oder
-Stimmqualität.
+Vollständiges GPU-Offloading ist trotz knapper Reserve schneller als teilweises
+CPU-Offloading. Im Test sank Gemma mit 32 von 34 GPU-Schichten von 91 auf 22
+Token/s und belastete die CPU vollständig. Darum bleibt das Modell ganz auf der
+GPU und der Kontext bewusst bei 2048 Tokens.
 
-### Messwerte auf diesem EVA-Rechner
+### Aktuelle Messwerte auf diesem EVA-Rechner
 
-Gemessen mit RTX 2070 8 GB, Qwen2.5 3B, XTTS v2, CUDA und Dateiausgabe. Bei
-Dateiausgabe bedeutet „erster Ton“, dass der erste PCM-Block die Audioausgabe
-erreicht hat; ohne angeschlossenen Lautsprecher ist das kein akustischer Messwert.
+Gemessen mit RTX 2070 8 GB, Gemma 3 4B Q4_K_M, XTTS v2, CUDA, Satz-Streaming und
+Dateiausgabe. „Erster Ton“ bedeutet ohne Lautsprecher, dass der erste PCM-Block
+die Audioausgabe erreicht hat.
 
-| Test | Erster Text | Erstes Audio | VRAM-Spitze | Ergebnis |
-|---|---:|---:|---:|---|
-| 4096 Kontext, 1 Antwort | 959 ms | 1357 ms | 5482 MB | vollständig |
-| 8192 Kontext, 1 Antwort | 898 ms | 1306 ms | 5702 MB | vollständig |
-| 4096 Kontext, 10 Antworten | 539–865 ms | 806–1213 ms | 5178 MB | 10/10 vollständig |
+| Test | Erster Textabschnitt | Erstes Audio | Erster Ton | VRAM-Spitze | TTS-RTF |
+|---|---:|---:|---:|---:|---:|
+| 4096 Kontext, 1 Antwort | 972 ms | 1418 ms | 1427 ms | 7660 MB | 0,307 |
 
-Im Zehn-Turn-Test blieb die VRAM-Belegung nach dem Einpendeln bei ungefähr
-5,1–5,2 GB; es gab weder OOM noch fortlaufendes Speicherwachstum. Damit ist der
-gleichzeitige Betrieb auf dieser RTX 2070 im Standardmodus bestätigt.
+Der Intent-Router benötigte dabei 1,7 ms. Ein 8192er Kontext erhöht den
+LLM-VRAM-Verbrauch ohne messbaren Qualitätsgewinn und ist für den gemeinsamen
+Betrieb mit XTTS daher nicht die Standardwahl.
+
+Die vollständige Modellauswahl steht in [LLM_TTS_BENCHMARK.md](LLM_TTS_BENCHMARK.md).
 
 ## Health-Status
 
@@ -194,7 +194,7 @@ gleichzeitige Betrieb auf dieser RTX 2070 im Standardmodus bestätigt.
 - `Voice-Referenz fehlt`: Pfad in `EVA_VOICE_REFERENCE` prüfen.
 - Kein Ton: `python -m tools.audio_devices` ausführen oder zunächst eine
   Ausgabedatei konfigurieren.
-- CUDA OOM: laufende fremde GPU-Prozesse prüfen, `EVA_LLM_NUM_CTX=4096` verwenden
+- CUDA OOM: laufende fremde GPU-Prozesse prüfen, `EVA_LLM_NUM_CTX=2048` verwenden
   und keine weiteren TTS-/LLM-Modelle parallel laden.
 - Cache neu erzeugen: EVA beenden und nur den passenden Inhalt von
   `voice/cache/` löschen; die Originalaufnahme bleibt davon unberührt.

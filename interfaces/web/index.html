@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>EVA · Lokaler Chat</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div class="ambient ambient-one"></div>
+  <div class="ambient ambient-two"></div>
+  <main class="shell">
+    <header class="topbar">
+      <div class="identity">
+        <div class="orb" aria-hidden="true"><span></span></div>
+        <div><p class="eyebrow">LOCAL INTELLIGENCE</p><h1>EVA</h1></div>
+      </div>
+      <div class="status-wrap">
+        <span id="status-dot" class="status-dot"></span>
+        <span id="status-text">Verbindung wird geprüft …</span>
+      </div>
+    </header>
+
+    <section id="chat" class="chat" aria-live="polite" aria-label="Chatverlauf">
+      <div id="empty-state" class="empty-state">
+        <div class="mini-orb"></div>
+        <h2>Was möchtest du wissen?</h2>
+        <p>EVA läuft lokal auf deinem Server. Ihre Stimme wird über diesen Browser abgespielt.</p>
+      </div>
+    </section>
+
+    <section class="composer-panel">
+      <div id="notice" class="notice" hidden></div>
+      <form id="composer" class="composer">
+        <textarea id="message" rows="1" maxlength="4000"
+          placeholder="Schreib EVA eine Nachricht …" aria-label="Nachricht"></textarea>
+        <button id="send" type="submit" aria-label="Nachricht senden">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M4 12 20 4l-5 16-3.2-6.1L4 12Zm7.8 1.9L20 4"/>
+          </svg>
+        </button>
+      </form>
+      <div class="composer-meta">
+        <label class="voice-toggle">
+          <input id="voice-enabled" type="checkbox" checked>
+          <span></span>
+          Stimme automatisch abspielen
+        </label>
+        <span>Enter senden · Shift + Enter neue Zeile</span>
+      </div>
+    </section>
+  </main>
+
+  <dialog id="login-dialog">
+    <form id="login-form" method="dialog" class="login-card">
+      <div class="mini-orb"></div>
+      <p class="eyebrow">GESCHÜTZTE VERBINDUNG</p>
+      <h2>Mit EVA verbinden</h2>
+      <p>Gib den Web-Token aus der <code>.env</code> des EVA-Servers ein.</p>
+      <input id="token-input" type="password" autocomplete="current-password"
+        placeholder="EVA_WEB_TOKEN" required>
+      <p id="login-error" class="login-error" hidden>Token nicht akzeptiert.</p>
+      <button type="submit">Verbinden</button>
+    </form>
+  </dialog>
+
+  <script src="/app.js" defer></script>
+</body>
+</html>

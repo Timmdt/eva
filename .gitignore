@@ -1,7 +1,5 @@
 venv/
 .venv/
-.venv-chatterbox/
-.venv-qwen/
 .venv-xtts/
 env/
 bin/
@@ -12,6 +10,13 @@ share/
 __pycache__/
 *.pyc
 .ipynb_checkpoints/
+
+# Temporäre Editor-, Patch- und Diagnoseartefakte
+*.orig
+*.rej
+*~
+debug.log
+rollout-*.jsonl
 
 # Private Daten (Sicherheit!)
 .env
@@ -28,7 +33,9 @@ data/presence_automation.json.tmp
 # Downloaded local TTS voice models
 data/voices/
 # Generated TTS samples
+data/benchmarks/
 data/tts/
+data/web_audio/
 
 # Private voice references and biometric speaker conditioning
 voice/reference/

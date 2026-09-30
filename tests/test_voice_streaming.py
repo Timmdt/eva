@@ -86,6 +86,15 @@ class TextChunkerTest(unittest.TestCase):
         self.assertNotIn("Quelle", chunks[0])
         self.assertNotIn("http", chunks[0])
 
+    def test_markdown_source_block_is_not_spoken(self):
+        spoken = sanitize_for_speech(
+            "Es war einmal ein stiller Wald.\n\n"
+            "Quellen:\n\n"
+            "- [Brüder Grimm](https://de.wikipedia.org/wiki/Br%C3%BCder_Grimm)\n"
+            "- https://example.test/story"
+        )
+        self.assertEqual(spoken, "Es war einmal ein stiller Wald.")
+
     def test_complete_response_groups_long_text_at_sentence_boundaries(self):
         chunker = SpeechChunker(self.config(response_chunk_max_words=12))
         chunks = chunker.complete_response(
@@ -118,6 +127,7 @@ class AudioQueueTest(unittest.TestCase):
         time.sleep(0.05)
         player.shutdown()
         self.assertEqual(received, [b"\x01\x00" * 20])
+
 
 
 class VoiceServiceTest(unittest.TestCase):
@@ -159,6 +169,7 @@ class VoiceServiceTest(unittest.TestCase):
     def test_low_vram_config_is_read(self):
         with patch.dict(os.environ, {"EVA_TTS_LOW_VRAM_MODE": "true"}, clear=False):
             self.assertTrue(VoiceConfig.from_env().low_vram_mode)
+
 
 
 class SpeakerCacheTest(unittest.TestCase):

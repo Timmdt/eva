@@ -2,7 +2,5 @@
 pypdf>=4.0.0
 # Desktop Visual Cortex camera support
 opencv-python-headless>=4.8.0
-# Natural, fully local text-to-speech (GPL-3.0-or-later)
-piper-tts>=1.7,<2
 # Local MP3 export for generated speech (LGPL-3.0-or-later)
 lameenc>=1.8.4,<2
