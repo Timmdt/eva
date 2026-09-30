@@ -1,2 +1,0 @@
-# Install CUDA-enabled PyTorch separately before this file.
-qwen-tts==0.1.1
