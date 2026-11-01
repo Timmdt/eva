@@ -14,53 +14,24 @@ try:
 except ImportError:
     ollama = None
 
-try:
-    from .config import EVA_CONFIG
-except ImportError:
-    from config import EVA_CONFIG
-
-try:
-    from memory.memory_engine import (
-        load_state,
-        save_state,
-        modify_state,
-        ai_modifier,
-        run_reflection_and_save,
-        load_memory,
-        search_projects,
-    )
-except ImportError:
-    from memory.memory_engine import (
-        load_state,
-        save_state,
-        modify_state,
-        ai_modifier,
-        run_reflection_and_save,
-        load_memory,
-        search_projects,
-    )
-
-from module.base_module import ModuleBase
+from memory.memory_engine import (
+    load_memory,
+    load_state,
+    modify_state,
+    run_reflection_and_save,
+    save_state,
+    search_projects,
+)
 from memory.profile_policy import access_for_identity
-from yui.RAG_Creator import RAGCreator
+from module.base_module import ModuleBase
 from rag import RAGRetriever, RetrievalUnavailableError
+from rag.json_store import RAGCreator
 from voice import VoiceService
 
-try:
-    from .activity import activity_registry
-except ImportError:
-    from activity import activity_registry
-
-try:
-    from .storytelling import local_story_response
-except ImportError:
-    from storytelling import local_story_response
-
-try:
-    from .intent_router import IntentRouter, IntentDecision
-except ImportError:
-    from intent_router import IntentRouter, IntentDecision
-
+from .activity import activity_registry
+from .config import EVA_CONFIG
+from .intent_router import IntentDecision, IntentRouter
+from .storytelling import local_story_response
 
 DEFAULT_MODULE_PATHS = [
     "module.jarvis_module",
@@ -74,9 +45,7 @@ DEFAULT_MODEL = "gemma4:e2b"
 # Tags, die EVA intern anfordern darf.
 LOAD_DOSSIER_RE = re.compile(r"\[LOAD_DOSSIER:\s*([^\]]+?)\s*\]")
 WEB_SEARCH_RE = re.compile(r"\[WEB_SEARCH:\s*([^\]]+?)\s*\]")
-INTERNAL_TAG_RE = re.compile(
-    r"\[(?:LOAD_DOSSIER|WEB_SEARCH):\s*[^\]]+\]"
-)
+INTERNAL_TAG_RE = re.compile(r"\[(?:LOAD_DOSSIER|WEB_SEARCH):\s*[^\]]+\]")
 
 Message = dict[str, str]
 
@@ -155,6 +124,7 @@ Wenn aktuelle Informationen aus dem Internet benötigt werden:
 Diese Tags sind interne Anweisungen. Verwende sie nur, wenn sie wirklich benötigt werden.
 """
 
+
 # Optionaler Mini-Zusatz aus der Config.
 # Die Persönlichkeit wird nicht jedes Mal als langer Fließtext übertragen.
 def _build_personality_state(config: dict[str, Any]) -> str:
@@ -217,9 +187,7 @@ class ModuleManager:
                     )
 
         if not loaded:
-            logging.warning(
-                "Keine Module geladen. Bitte überprüfe 'modules' in config."
-            )
+            logging.warning("Keine Module geladen. Bitte überprüfe 'modules' in config.")
 
         return cls(loaded)
 
@@ -319,40 +287,24 @@ class EVA:
         self._interaction_lock = threading.Lock()
         self.last_performance: dict[str, float | int] = {}
         self.model = str(self.cfg.get("model", DEFAULT_MODEL))
-        self.web_answer_model = str(
-            self.cfg.get("web_answer_model", self.model) or self.model
-        )
+        self.web_answer_model = str(self.cfg.get("web_answer_model", self.model) or self.model)
 
-        self.max_history_messages = int(
-            self.cfg.get("max_history_messages", 8)
-        )
-        self.max_history_chars = int(
-            self.cfg.get("max_history_chars", 6000)
-        )
+        self.max_history_messages = int(self.cfg.get("max_history_messages", 8))
+        self.max_history_chars = int(self.cfg.get("max_history_chars", 6000))
         self.rag_top_k = int(self.cfg.get("rag_top_k", 2))
-        self.max_context_chars = int(
-            self.cfg.get("max_context_chars", 12000)
-        )
+        self.max_context_chars = int(self.cfg.get("max_context_chars", 12000))
 
         self.state = load_state()
         self._ensure_state_defaults(self.state)
 
-        self.conversation_context = dict(
-            self.state.get("conversation_context", {}) or {}
-        )
+        self.conversation_context = dict(self.state.get("conversation_context", {}) or {})
         self.current_identity = self.state.get("current_identity")
 
-        router_model = str(
-            self.cfg.get("router_model", self.model)
-        )
+        router_model = str(self.cfg.get("router_model", self.model))
         self.intent_router = IntentRouter(
             router_model,
-            history_messages=int(
-                self.cfg.get("router_history_messages", 6)
-            ),
-            max_dossiers=int(
-                self.cfg.get("router_max_dossiers", 20)
-            ),
+            history_messages=int(self.cfg.get("router_history_messages", 6)),
+            max_dossiers=int(self.cfg.get("router_max_dossiers", 20)),
             keep_alive=str(self.cfg.get("ollama_keep_alive", "30m")),
             num_ctx=int(self.cfg.get("llm_num_ctx", 2048)),
         )
@@ -364,21 +316,15 @@ class EVA:
             self.name,
         )
 
-        self.startup_actions = self.module_manager.run_startup_actions(
-            self._get_module_context()
-        )
+        self.startup_actions = self.module_manager.run_startup_actions(self._get_module_context())
 
-        self.startup_message = self._resolve_startup_message(
-            self.startup_actions
-        )
+        self.startup_message = self._resolve_startup_message(self.startup_actions)
 
         if self.startup_message and self.cfg.get("persist_startup_message", False):
             self._append_assistant_history(self.startup_message)
 
         if run_module_tests is None:
-            run_module_tests = bool(
-                self.cfg.get("run_module_tests_on_start", True)
-            )
+            run_module_tests = bool(self.cfg.get("run_module_tests_on_start", True))
 
         self.module_test_results: list[tuple[bool, str]] = []
         if run_module_tests:
@@ -449,9 +395,7 @@ class EVA:
 
     def _build_message_history(self) -> list[Message]:
         """Wählt vollständige Benutzer-Antwort-Paare für den Modellkontext."""
-        history = self._normalize_history(
-            self.state.get("history", [])
-        )
+        history = self._normalize_history(self.state.get("history", []))
         # Nur vollständige User/Assistant-Paare gehen ins Modell. Wiederholte
         # Startup-Texte oder andere verwaiste Assistant-Einträge verwässern
         # sonst die aktuelle Aufgabe erheblich.
@@ -507,9 +451,7 @@ class EVA:
         self,
         current_time: datetime.datetime,
     ) -> str:
-        module_names = ", ".join(
-            self.module_manager.module_names()
-        ) or "keine"
+        module_names = ", ".join(self.module_manager.module_names()) or "keine"
 
         return (
             "AKTUELLER ECHTZEIT-KONTEXT\n"
@@ -570,9 +512,7 @@ class EVA:
 
         important_point = startup_memory.get("important_point")
         if important_point:
-            parts.append(
-                f"Wichtige Erinnerung: {important_point}"
-            )
+            parts.append(f"Wichtige Erinnerung: {important_point}")
 
         project = startup_memory.get("project")
         if isinstance(project, dict):
@@ -585,19 +525,13 @@ class EVA:
                 or "den nächsten Schritt"
             )
 
-            parts.append(
-                f"Projekt: {name}; Status: {status}; Fokus: {focus}."
-            )
+            parts.append(f"Projekt: {name}; Status: {status}; Fokus: {focus}.")
 
         learning_goal = startup_memory.get("learning_goal")
         if learning_goal:
-            parts.append(
-                f"Lernziel: {learning_goal}"
-            )
+            parts.append(f"Lernziel: {learning_goal}")
 
-        parts.append(
-            "Antworte ausschließlich mit der Startnachricht."
-        )
+        parts.append("Antworte ausschließlich mit der Startnachricht.")
 
         return "\n".join(parts)
 
@@ -632,16 +566,12 @@ class EVA:
                 keep_alive=str(self.cfg.get("ollama_keep_alive", "30m")),
             )
 
-            text = str(
-                response["message"]["content"]
-            ).strip()
+            text = str(response["message"]["content"]).strip()
 
             return self._clean_internal_tags(text)
 
         except Exception:
-            logging.exception(
-                "Startup-Ollama-Anfrage fehlgeschlagen."
-            )
+            logging.exception("Startup-Ollama-Anfrage fehlgeschlagen.")
             return self._fallback_startup_text(startup_memory)
 
     @staticmethod
@@ -655,22 +585,16 @@ class EVA:
 
         important_point = startup_memory.get("important_point")
         if important_point:
-            parts.append(
-                f"Kurze Erinnerung: {important_point}."
-            )
+            parts.append(f"Kurze Erinnerung: {important_point}.")
 
         project = startup_memory.get("project")
         if isinstance(project, dict):
             name = project.get("name", "dein Projekt")
-            parts.append(
-                f"Bei {name} ist noch etwas offen."
-            )
+            parts.append(f"Bei {name} ist noch etwas offen.")
 
         learning_goal = startup_memory.get("learning_goal")
         if learning_goal:
-            parts.append(
-                f"Dein Lernziel war: {learning_goal}."
-            )
+            parts.append(f"Dein Lernziel war: {learning_goal}.")
 
         return " ".join(parts) or "Ich bin wieder da. Was steht an?"
 
@@ -697,9 +621,7 @@ class EVA:
             )
 
         except Exception:
-            logging.exception(
-                "Projekt-Memory-Suche fehlgeschlagen."
-            )
+            logging.exception("Projekt-Memory-Suche fehlgeschlagen.")
             return []
 
     def _load_dossier(self, dossier_name: str) -> dict | None:
@@ -721,18 +643,14 @@ class EVA:
 
             # 1. Exakter Name
             for project in projects:
-                project_name = str(
-                    project.get("name", "")
-                ).strip().lower()
+                project_name = str(project.get("name", "")).strip().lower()
 
                 if project_name == name:
                     return project
 
             # 2. Falls das kleine Modell nur einen ähnlichen Namen liefert
             for project in projects:
-                project_name = str(
-                    project.get("name", "")
-                ).strip().lower()
+                project_name = str(project.get("name", "")).strip().lower()
 
                 if name in project_name or project_name in name:
                     return project
@@ -778,7 +696,10 @@ class EVA:
         Hier wird NICHT der komplette Project Index geladen.
         Es werden nur maximal wenige passende Dossier-Namen genannt.
         """
-        if self.cfg.get("profile_memory_isolation") and not self._profile_access().allow_private_memory:
+        if (
+            self.cfg.get("profile_memory_isolation")
+            and not self._profile_access().allow_private_memory
+        ):
             return ""
         matches = self._search_projects(user_msg)
 
@@ -798,9 +719,7 @@ class EVA:
 
         return (
             "MEMORY HINT\n"
-            "Möglicherweise relevante Dossiers: "
-            + ", ".join(names)
-            + "\n"
+            "Möglicherweise relevante Dossiers: " + ", ".join(names) + "\n"
             "Diese Namen sind noch keine geladenen Fakten. "
             "Bei konkreten Projektdetails muss das Dossier angefordert werden."
         )
@@ -865,21 +784,12 @@ class EVA:
             context = "\n---\n".join(chunks)
 
             if len(context) > self.max_context_chars:
-                context = (
-                    context[: self.max_context_chars]
-                    + "\n[ RAG-Kontext gekürzt ]"
-                )
+                context = context[: self.max_context_chars] + "\n[ RAG-Kontext gekürzt ]"
 
-            return (
-                "RAG-KONTEXT\n"
-                "Verwende diese Dokumentdaten nur als Faktenquelle:\n"
-                f"{context}"
-            )
+            return f"RAG-KONTEXT\nVerwende diese Dokumentdaten nur als Faktenquelle:\n{context}"
 
         except Exception:
-            logging.exception(
-                "Fehler bei der RAG-Abfrage."
-            )
+            logging.exception("Fehler bei der RAG-Abfrage.")
             return ""
 
     # ------------------------------------------------------------------
@@ -931,9 +841,7 @@ class EVA:
                 }
             )
 
-            state["conversation_context"] = dict(
-                self.conversation_context
-            )
+            state["conversation_context"] = dict(self.conversation_context)
 
             return state
 
@@ -951,9 +859,7 @@ class EVA:
         top_p: float = 0.90,
     ) -> str:
         if ollama is None:
-            raise RuntimeError(
-                "Das Python-Paket 'ollama' ist nicht installiert."
-            )
+            raise RuntimeError("Das Python-Paket 'ollama' ist nicht installiert.")
 
         response = ollama.chat(
             model=self.model,
@@ -970,9 +876,7 @@ class EVA:
             keep_alive=str(self.cfg.get("ollama_keep_alive", "30m")),
         )
 
-        return str(
-            response["message"]["content"]
-        ).strip()
+        return str(response["message"]["content"]).strip()
 
     @staticmethod
     def _stream_content(chunk: Any) -> str:
@@ -985,14 +889,24 @@ class EVA:
             return str(getattr(message, "content", "") or "")
         return ""
 
-    def _chat_stream(self, messages: list[Message], *, temperature: float = 0.30,
-                     top_p: float = 0.90, model: str | None = None) -> Iterator[str]:
+    def _chat_stream(
+        self,
+        messages: list[Message],
+        *,
+        temperature: float = 0.30,
+        top_p: float = 0.90,
+        model: str | None = None,
+    ) -> Iterator[str]:
         if ollama is None:
             raise RuntimeError("Das Python-Paket 'ollama' ist nicht installiert.")
         selected_model = model or self.model
-        options = {"temperature": temperature, "top_p": top_p,
-                   "repeat_penalty": 1.15, "repeat_last_n": 64,
-                   "num_ctx": int(self.cfg.get("llm_num_ctx", 2048))}
+        options = {
+            "temperature": temperature,
+            "top_p": top_p,
+            "repeat_penalty": 1.15,
+            "repeat_last_n": 64,
+            "num_ctx": int(self.cfg.get("llm_num_ctx", 2048)),
+        }
         try:
             stream = ollama.chat(
                 model=selected_model,
@@ -1018,9 +932,7 @@ class EVA:
                 stream=True,
                 keep_alive=str(self.cfg.get("ollama_keep_alive", "30m")),
             )
-        yield from self._visible_stream(
-            self._stream_content(chunk) for chunk in stream
-        )
+        yield from self._visible_stream(self._stream_content(chunk) for chunk in stream)
 
     @staticmethod
     def _visible_stream(chunks: Iterator[str]) -> Iterator[str]:
@@ -1040,10 +952,15 @@ class EVA:
                     buffer = buffer[start:]
                 match = INTERNAL_TAG_RE.match(buffer)
                 if match:
-                    buffer = buffer[match.end():]
+                    buffer = buffer[match.end() :]
                     continue
-                if any(prefix.startswith(buffer) or buffer.startswith(prefix)
-                       for prefix in prefixes) and "]" not in buffer:
+                if (
+                    any(
+                        prefix.startswith(buffer) or buffer.startswith(prefix)
+                        for prefix in prefixes
+                    )
+                    and "]" not in buffer
+                ):
                     break
                 yield buffer[0]
                 buffer = buffer[1:]
@@ -1101,9 +1018,7 @@ class EVA:
         web_module = self.module_manager.get_module("WebSearchCore")
 
         if web_module is None:
-            logging.warning(
-                "WebSearchCore wurde angefordert, ist aber nicht geladen."
-            )
+            logging.warning("WebSearchCore wurde angefordert, ist aber nicht geladen.")
             return None
 
         try:
@@ -1145,7 +1060,10 @@ class EVA:
 
     def _memory_index_for_router(self) -> list[dict[str, Any]]:
         """Nur kleine Dossier-Metadaten an den Router geben, keine Inhalte."""
-        if self.cfg.get("profile_memory_isolation") and not self._profile_access().allow_private_memory:
+        if (
+            self.cfg.get("profile_memory_isolation")
+            and not self._profile_access().allow_private_memory
+        ):
             return []
         try:
             memory = load_memory()
@@ -1187,7 +1105,10 @@ class EVA:
         user_message: str,
     ) -> str | None:
         """Lädt nur die vom Router benötigten Memory-Daten."""
-        if self.cfg.get("profile_memory_isolation") and not self._profile_access().allow_private_memory:
+        if (
+            self.cfg.get("profile_memory_isolation")
+            and not self._profile_access().allow_private_memory
+        ):
             logging.info("Privater Memory-Kontext für unbekanntes/Besucherprofil blockiert.")
             return None
         projects: list[dict] = []
@@ -1299,9 +1220,7 @@ class EVA:
             },
             {
                 "role": "system",
-                "content": self._build_runtime_context(
-                    current_time
-                ),
+                "content": self._build_runtime_context(current_time),
             },
         ]
 
@@ -1309,23 +1228,23 @@ class EVA:
             messages.append({"role": "system", "content": self._profile_access().context_note})
 
         if story_request:
-            messages.append({
-                "role": "system",
-                "content": (
-                    "ERZÄHLMODUS: Der Benutzer möchte eine zusammenhängende Geschichte, "
-                    "keine Recherche und keine Erklärung über Autoren. Verwende keine Quellen, "
-                    "Links oder Meta-Kommentare. Wenn die Brüder Grimm genannt werden, erzähle "
-                    "ein tatsächlich bekanntes Märchen aus ihrer Sammlung statt eine Biografie "
-                    "oder eine neu erfundene Geschichte über die Brüder. Schreibe natürliches, "
-                    "grammatisch sauberes Deutsch in vollständigen Sätzen und mit ruhigem "
-                    "Erzählrhythmus. Beginne direkt mit einem passenden Titel und der Handlung."
-                ),
-            })
+            messages.append(
+                {
+                    "role": "system",
+                    "content": (
+                        "ERZÄHLMODUS: Der Benutzer möchte eine zusammenhängende Geschichte, "
+                        "keine Recherche und keine Erklärung über Autoren. Verwende keine Quellen, "
+                        "Links oder Meta-Kommentare. Wenn die Brüder Grimm genannt werden, erzähle "
+                        "ein tatsächlich bekanntes Märchen aus ihrer Sammlung statt eine Biografie "
+                        "oder eine neu erfundene Geschichte über die Brüder. Schreibe natürliches, "
+                        "grammatisch sauberes Deutsch in vollständigen Sätzen und mit ruhigem "
+                        "Erzählrhythmus. Beginne direkt mit einem passenden Titel und der Handlung."
+                    ),
+                }
+            )
 
         # Nur relevante Projekt-Hinweise, niemals kompletter Index.
-        memory_hint = self._build_relevant_memory_hint(
-            user_msg
-        )
+        memory_hint = self._build_relevant_memory_hint(user_msg)
         if memory_hint:
             messages.append(
                 {
@@ -1359,10 +1278,7 @@ class EVA:
         if web_data:
             safe_web_data = web_data
             if len(safe_web_data) > self.max_context_chars:
-                safe_web_data = (
-                    safe_web_data[: self.max_context_chars]
-                    + "\n[Web-Kontext gekürzt]"
-                )
+                safe_web_data = safe_web_data[: self.max_context_chars] + "\n[Web-Kontext gekürzt]"
 
             web_message = {
                 "role": "system",
@@ -1390,14 +1306,16 @@ class EVA:
             messages.append(web_message)
 
         if IntentRouter.resets_context(user_msg):
-            messages.append({
-                "role": "system",
-                "content": (
-                    "Die aktuelle Nachricht beginnt ein neues Thema. Antworte nur "
-                    "darauf, kurz und natürlich auf Deutsch. Sprich den Benutzer "
-                    "mit du an, niemals mit Sie."
-                ),
-            })
+            messages.append(
+                {
+                    "role": "system",
+                    "content": (
+                        "Die aktuelle Nachricht beginnt ein neues Thema. Antworte nur "
+                        "darauf, kurz und natürlich auf Deutsch. Sprich den Benutzer "
+                        "mit du an, niemals mit Sie."
+                    ),
+                }
+            )
 
         messages.append(
             {
@@ -1407,7 +1325,6 @@ class EVA:
         )
 
         return messages
-
 
     @staticmethod
     def _quick_conversation_response(message: str) -> str | None:
@@ -1420,9 +1337,7 @@ class EVA:
         )
         if not match:
             return None
-        greeting = re.match(
-            r"(?:hallo|hi|hey|moin|servus|guten (?:morgen|tag|abend))", clean
-        )
+        greeting = re.match(r"(?:hallo|hi|hey|moin|servus|guten (?:morgen|tag|abend))", clean)
         prefix = "Hi, " if greeting else ""
         return f"{prefix}mir geht es gut, danke. Und wie geht es dir?"
 
@@ -1478,9 +1393,13 @@ class EVA:
 
         total_started = time.perf_counter()
         voice_request = self.voice.start_response()
-        metrics = {"router_ms": 0.0, "tool_ms": 0.0, "rag_ms": 0.0,
-                   "llm_time_to_first_token_ms": 0.0,
-                   "total_generation_ms": 0.0}
+        metrics = {
+            "router_ms": 0.0,
+            "tool_ms": 0.0,
+            "rag_ms": 0.0,
+            "llm_time_to_first_token_ms": 0.0,
+            "total_generation_ms": 0.0,
+        }
         with activity_registry.track("request"):
             module_response = self.module_manager.route(message, self._get_module_context())
             if module_response:
@@ -1495,8 +1414,13 @@ class EVA:
             started = time.perf_counter()
             decision = self._route_intent(message)
             metrics["router_ms"] = (time.perf_counter() - started) * 1000.0
-            logging.debug("[IntentRouter] %s | confidence=%.2f | query=%r | reason=%s",
-                         decision.action, decision.confidence, decision.query, decision.reason)
+            logging.debug(
+                "[IntentRouter] %s | confidence=%.2f | query=%r | reason=%s",
+                decision.action,
+                decision.confidence,
+                decision.query,
+                decision.reason,
+            )
 
             started = time.perf_counter()
             web_data, memory_context = self._execute_intent(decision, message)
@@ -1511,8 +1435,11 @@ class EVA:
             collected: list[str] = []
             try:
                 for chunk in self.generate_response_stream(
-                    message, web_data=web_data, dossier_context=memory_context,
-                    rag_context=rag_context):
+                    message,
+                    web_data=web_data,
+                    dossier_context=memory_context,
+                    rag_context=rag_context,
+                ):
                     if not collected:
                         metrics["llm_time_to_first_token_ms"] = (
                             time.perf_counter() - llm_started
@@ -1556,7 +1483,7 @@ class EVA:
         if len(summary) > 650:
             prefix = summary[:650]
             endings = list(re.finditer(r"[.!?](?=\s|\Z)", prefix))
-            summary = prefix[:endings[-1].end()] if endings else prefix.rstrip() + "…"
+            summary = prefix[: endings[-1].end()] if endings else prefix.rstrip() + "…"
         source_match = re.search(r"\nQuelle:\s*(https?://\S+)", web_data)
         if source_match:
             return f"{summary}\n\nQuelle: {source_match.group(1)}"
@@ -1611,9 +1538,13 @@ class EVA:
 
         return " ".join([first, *details, "Quelle: wttr.in"])
 
-    def generate_response_stream(self, user_msg: str, web_data: str | None = None,
-                                 dossier_context: str | None = None,
-                                 rag_context: str | None = None) -> Iterator[str]:
+    def generate_response_stream(
+        self,
+        user_msg: str,
+        web_data: str | None = None,
+        dossier_context: str | None = None,
+        rag_context: str | None = None,
+    ) -> Iterator[str]:
         """Wählt direkte Quellenantwort oder lokales Modell und streamt den Text."""
         direct_weather = self._direct_weather_response(web_data)
         if direct_weather:
@@ -1631,16 +1562,18 @@ class EVA:
                 rag_context=rag_context,
             )
         else:
-            messages = self._build_messages(user_msg, web_data=None,
-                                            dossier_context=dossier_context,
-                                            rag_context=rag_context)
+            messages = self._build_messages(
+                user_msg, web_data=None, dossier_context=dossier_context, rag_context=rag_context
+            )
         story_request = not web_data and IntentRouter.is_story_request(user_msg)
-        stream = iter(self._chat_stream(
-            messages,
-            temperature=0.0 if web_data else (0.42 if story_request else 0.30),
-            top_p=0.70 if web_data else (0.88 if story_request else 0.90),
-            model=self.web_answer_model if web_data else self.model,
-        ))
+        stream = iter(
+            self._chat_stream(
+                messages,
+                temperature=0.0 if web_data else (0.42 if story_request else 0.30),
+                top_p=0.70 if web_data else (0.88 if story_request else 0.90),
+                model=self.web_answer_model if web_data else self.model,
+            )
+        )
         if not web_data:
             yield from stream
             return
@@ -1659,11 +1592,19 @@ class EVA:
             pass
 
         prefix = "".join(buffered).casefold()
-        invalid_opening = not prefix.strip() or any(phrase in prefix for phrase in (
-            "ich werde zunächst", "ich werde nun", "suchergebnis sammeln",
-            "beispiel-suchergebnisse", "weitere suchanweisungen", "lass uns zunächst",
-            "suchanfrage formulieren", "schritt 1:",
-        ))
+        invalid_opening = not prefix.strip() or any(
+            phrase in prefix
+            for phrase in (
+                "ich werde zunächst",
+                "ich werde nun",
+                "suchergebnis sammeln",
+                "beispiel-suchergebnisse",
+                "weitere suchanweisungen",
+                "lass uns zunächst",
+                "suchanfrage formulieren",
+                "schritt 1:",
+            )
+        )
         if invalid_opening:
             retry_instruction: Message = {
                 "role": "system",
@@ -1677,7 +1618,9 @@ class EVA:
             }
             retry_messages = messages[:-1] + [retry_instruction, messages[-1]]
             retry_stream = self._chat_stream(
-                retry_messages, temperature=0.10, top_p=0.80,
+                retry_messages,
+                temperature=0.10,
+                top_p=0.80,
                 model=self.web_answer_model,
             )
             yield from self._web_stream_with_sources(retry_stream, web_data)
@@ -1690,8 +1633,7 @@ class EVA:
         yield from self._web_stream_with_sources(complete_stream(), web_data)
 
     @staticmethod
-    def _web_stream_with_sources(chunks: Iterator[str],
-                                 web_data: str) -> Iterator[str]:
+    def _web_stream_with_sources(chunks: Iterator[str], web_data: str) -> Iterator[str]:
         """Keep streaming, then append exact source URLs if the model omitted them."""
         collected: list[str] = []
         for chunk in chunks:
@@ -1699,9 +1641,7 @@ class EVA:
             yield chunk
 
         answer = "".join(collected)
-        urls = list(dict.fromkeys(
-            re.findall(r"https?://[^\s<>\"'\])]+", web_data)
-        ))
+        urls = list(dict.fromkeys(re.findall(r"https?://[^\s<>\"'\])]+", web_data)))
         missing = [url for url in urls if url not in answer]
         if not missing:
             return
@@ -1756,8 +1696,11 @@ class EVA:
                 },
             ]
         price_check = ""
-        if re.search(r"\b(?:günstig\w*|billig\w*|preis\w*|budget\w*|kosten\w*)\b",
-                     user_msg, flags=re.IGNORECASE):
+        if re.search(
+            r"\b(?:günstig\w*|billig\w*|preis\w*|budget\w*|kosten\w*)\b",
+            user_msg,
+            flags=re.IGNORECASE,
+        ):
             price_check = (
                 "\nDATENLAGE-PFLICHTSATZ: Verwende im Abschnitt 'Datenlage' exakt diesen Satz: "
                 "Aktuelle Marktpreise werden in den Quellen nicht genannt."
@@ -1831,14 +1774,10 @@ class EVA:
             # ----------------------------------------------------------
             # 2. Dossier-Anforderung
             # ----------------------------------------------------------
-            dossier_name = self._extract_dossier_request(
-                reply
-            )
+            dossier_name = self._extract_dossier_request(reply)
 
             if dossier_name and not dossier_context:
-                project = self._load_dossier(
-                    dossier_name
-                )
+                project = self._load_dossier(dossier_name)
 
                 if project is None:
                     logging.warning(
@@ -1870,13 +1809,9 @@ class EVA:
                         top_p=0.85,
                     )
 
-                    return self._clean_internal_tags(
-                        fallback
-                    )
+                    return self._clean_internal_tags(fallback)
 
-                dossier_text = self._format_dossier(
-                    project
-                )
+                dossier_text = self._format_dossier(project)
 
                 # Zweiter Call mit geladenem Dossier.
                 second_messages = messages + [
@@ -1901,21 +1836,15 @@ class EVA:
                     top_p=0.90,
                 )
 
-                return self._clean_internal_tags(
-                    final_reply
-                )
+                return self._clean_internal_tags(final_reply)
 
             # ----------------------------------------------------------
             # 3. Websuche auf Wunsch des LLM
             # ----------------------------------------------------------
-            search_query = self._extract_web_request(
-                reply
-            )
+            search_query = self._extract_web_request(reply)
 
             if search_query and not web_data:
-                search_result = self._run_web_search(
-                    search_query
-                )
+                search_result = self._run_web_search(search_query)
 
                 if search_result:
                     second_messages = self._build_messages(
@@ -1931,27 +1860,17 @@ class EVA:
                         top_p=0.90,
                     )
 
-                    return self._clean_internal_tags(
-                        final_reply
-                    )
+                    return self._clean_internal_tags(final_reply)
 
                 logging.warning(
-                    "EVA wollte Websuche verwenden, "
-                    "aber es wurden keine Webdaten geliefert."
+                    "EVA wollte Websuche verwenden, aber es wurden keine Webdaten geliefert."
                 )
 
-            return self._clean_internal_tags(
-                reply
-            )
+            return self._clean_internal_tags(reply)
 
         except Exception as exc:
-            logging.exception(
-                "Ollama-Anfrage fehlgeschlagen."
-            )
-            return (
-                "Ich habe gerade ein Problem mit meinem "
-                f"kognitiven Kern: {exc}"
-            )
+            logging.exception("Ollama-Anfrage fehlgeschlagen.")
+            return f"Ich habe gerade ein Problem mit meinem kognitiven Kern: {exc}"
 
     # ------------------------------------------------------------------
     # Testing / shutdown / CLI
@@ -1976,9 +1895,7 @@ class EVA:
                 keep_alive=str(self.cfg.get("ollama_keep_alive", "30m")),
             )
             if self.cfg.get("performance_debug"):
-                logging.info(
-                    "LLM warm: %.1f ms", (time.perf_counter() - started) * 1000.0
-                )
+                logging.info("LLM warm: %.1f ms", (time.perf_counter() - started) * 1000.0)
             return True
         except Exception:
             logging.exception("LLM-Warmup ist fehlgeschlagen.")
@@ -1997,9 +1914,7 @@ class EVA:
 
         for ok, msg in results:
             status = "OK" if ok else "FEHLER"
-            print(
-                f"[Modultest] {status} - {msg}"
-            )
+            print(f"[Modultest] {status} - {msg}")
 
         return results
 
@@ -2038,45 +1953,6 @@ class EVA:
 
 
 if __name__ == "__main__":
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s | %(levelname)s | %(message)s",
-    )
+    from main import main
 
-    eva = EVA()
-
-    print(
-        f"--- {eva.name} Initialisiert ---"
-    )
-
-    update = modify_state(ai_modifier)
-
-    print(
-        "Initialer Zustand:",
-        update,
-    )
-
-    if eva.startup():
-        eva.speak(eva.startup())
-
-    try:
-        while True:
-            user_input = input("Du: ").strip()
-
-            if user_input.lower() in {
-                "exit",
-                "shutdown",
-                "bye",
-            }:
-                print("Auf Wiedersehen!")
-                eva.shutdown()
-                break
-
-            reply = eva.receive(
-                user_input
-            )
-            eva.speak(reply)
-
-    except KeyboardInterrupt:
-        print("\nBeendet.")
-        eva.shutdown()
+    main()

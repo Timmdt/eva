@@ -3,8 +3,9 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+from collections.abc import Iterator
 from contextlib import contextmanager
-from typing import Any, Iterator
+from typing import Any
 
 
 class PostgresUnavailableError(RuntimeError):
@@ -23,8 +24,15 @@ def version_tuple(value: str) -> tuple[int, ...]:
 class PostgresVectorStore:
     """Thin pgvector store. psycopg is imported only when this backend is used."""
 
-    def __init__(self, database_url: str, *, dimension: int, pool_min: int = 1,
-                 pool_max: int = 6, connect_timeout: float = 3.0) -> None:
+    def __init__(
+        self,
+        database_url: str,
+        *,
+        dimension: int,
+        pool_min: int = 1,
+        pool_max: int = 6,
+        connect_timeout: float = 3.0,
+    ) -> None:
         if not database_url:
             raise PostgresUnavailableError("EVA_DATABASE_URL ist nicht gesetzt.")
         if dimension <= 0:
@@ -103,20 +111,27 @@ class PostgresVectorStore:
                         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
                     )
                 """)
-                cursor.execute("""
+                cursor.execute(
+                    """
                     INSERT INTO rag_settings(key, value) VALUES ('embedding_dimension', %s)
                     ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()
-                """, (str(self.dimension),))
+                """,
+                    (str(self.dimension),),
+                )
                 hnsw = version_tuple(version) >= (0, 5, 0)
                 if hnsw:
                     cursor.execute("""
                         CREATE INDEX IF NOT EXISTS rag_documents_embedding_hnsw
                         ON rag_documents USING hnsw (embedding vector_cosine_ops)
                     """)
-                cursor.execute("CREATE INDEX IF NOT EXISTS rag_documents_source_idx "
-                               "ON rag_documents ((metadata->>'source'))")
-                cursor.execute("CREATE INDEX IF NOT EXISTS rag_documents_content_hash_idx "
-                               "ON rag_documents (content_hash)")
+                cursor.execute(
+                    "CREATE INDEX IF NOT EXISTS rag_documents_source_idx "
+                    "ON rag_documents ((metadata->>'source'))"
+                )
+                cursor.execute(
+                    "CREATE INDEX IF NOT EXISTS rag_documents_content_hash_idx "
+                    "ON rag_documents (content_hash)"
+                )
             connection.commit()
         return {"pgvector_version": version, "hnsw": hnsw, "dimension": self.dimension}
 
@@ -126,10 +141,16 @@ class PostgresVectorStore:
         rows = []
         for chunk in chunks:
             content = str(chunk["content"]).strip()
-            rows.append((str(chunk["document_id"]), str(chunk["chunk_id"]), content,
-                         hashlib.sha256(content.encode("utf-8")).hexdigest(),
-                         vector_literal(chunk["embedding"]),
-                         json.dumps(chunk.get("metadata") or {}, ensure_ascii=False)))
+            rows.append(
+                (
+                    str(chunk["document_id"]),
+                    str(chunk["chunk_id"]),
+                    content,
+                    hashlib.sha256(content.encode("utf-8")).hexdigest(),
+                    vector_literal(chunk["embedding"]),
+                    json.dumps(chunk.get("metadata") or {}, ensure_ascii=False),
+                )
+            )
         statement = """
             INSERT INTO rag_documents
                 (document_id, chunk_id, content, content_hash, embedding, metadata)
@@ -158,9 +179,15 @@ class PostgresVectorStore:
             connection.commit()
         return len(unique_rows)
 
-    def search(self, vector: list[float], *, top_k: int, threshold: float,
-               metadata_filter: dict[str, Any] | None = None,
-               source: str | None = None) -> list[dict[str, Any]]:
+    def search(
+        self,
+        vector: list[float],
+        *,
+        top_k: int,
+        threshold: float,
+        metadata_filter: dict[str, Any] | None = None,
+        source: str | None = None,
+    ) -> list[dict[str, Any]]:
         literal = vector_literal(vector)
         where = ["(1 - (embedding <=> %s::vector)) >= %s"]
         params: list[Any] = [literal, literal, threshold]
@@ -175,7 +202,7 @@ class PostgresVectorStore:
             SELECT id, document_id, chunk_id, content, metadata,
                    1 - (embedding <=> %s::vector) AS score
             FROM rag_documents
-            WHERE {' AND '.join(where)}
+            WHERE {" AND ".join(where)}
             ORDER BY embedding <=> %s::vector
             LIMIT %s
         """
@@ -183,10 +210,17 @@ class PostgresVectorStore:
             with connection.cursor() as cursor:
                 cursor.execute(statement, params)
                 rows = cursor.fetchall()
-        return [{"id": row[0], "document_id": row[1], "chunk_id": row[2],
-                 "content": row[3],
-                 "metadata": row[4] if isinstance(row[4], dict) else json.loads(row[4]),
-                 "score": float(row[5])} for row in rows]
+        return [
+            {
+                "id": row[0],
+                "document_id": row[1],
+                "chunk_id": row[2],
+                "content": row[3],
+                "metadata": row[4] if isinstance(row[4], dict) else json.loads(row[4]),
+                "score": float(row[5]),
+            }
+            for row in rows
+        ]
 
     def health(self) -> bool:
         with self.connection() as connection:

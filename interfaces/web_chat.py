@@ -6,9 +6,9 @@ import os
 import secrets
 import shutil
 import threading
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Any, Iterator
-
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -32,9 +32,7 @@ class WebChat:
         self.audio_retention = _env_int("EVA_WEB_AUDIO_RETENTION", 20)
         configured_dir = Path(os.getenv("EVA_WEB_AUDIO_DIR", "data/web_audio"))
         self.audio_dir = (
-            configured_dir
-            if configured_dir.is_absolute()
-            else self.project_root / configured_dir
+            configured_dir if configured_dir.is_absolute() else self.project_root / configured_dir
         )
         self._chat_lock = threading.Lock()
         self._audio_lock = threading.Lock()
@@ -136,9 +134,7 @@ class WebChat:
                 pass
 
     def audio(self, audio_id: str) -> tuple[Path, str] | None:
-        if len(audio_id) != 32 or any(
-            char not in "0123456789abcdef" for char in audio_id
-        ):
+        if len(audio_id) != 32 or any(char not in "0123456789abcdef" for char in audio_id):
             return None
         with self._audio_lock:
             path = self._audio_files.get(audio_id)

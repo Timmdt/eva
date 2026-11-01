@@ -1,6 +1,10 @@
 venv/
 .venv/
 .venv-xtts/
+.venv-nova/
+.venv-eva-desktop/
+dist/
+build/
 env/
 bin/
 lib/
@@ -8,6 +12,7 @@ share/
 
 # Lokale Speicher & Caches
 __pycache__/
+.ruff_cache/
 *.pyc
 .ipynb_checkpoints/
 
@@ -36,6 +41,7 @@ data/voices/
 data/benchmarks/
 data/tts/
 data/web_audio/
+data/documents/
 
 # Private voice references and biometric speaker conditioning
 voice/reference/

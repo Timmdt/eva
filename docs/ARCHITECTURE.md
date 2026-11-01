@@ -36,7 +36,32 @@ Tapo -> EXTERNES SENTRY-PROJEKT (24/7, lokale Detection + Recognition)
                                              `- desk_presence -> EVA /presence
 ```
 
-Das externe Sentry-Projekt ist die einzige Power-Control-Instanz und besitzt keine Codeabhängigkeit zu diesem Repository. Die Netzwerkgrenze dieses EVA-Servers besteht aus `/health`, `/presence` und `/shutdown`. `interfaces.presence_state` fusioniert die eingehende Raum-Presence mit Desk-Presence für das EVA-Profil.
+Das externe Sentry-Projekt ist die einzige Power-Control-Instanz und besitzt keine Codeabhängigkeit zu diesem Repository. Es verwendet ausschließlich `/health`, `/presence` und `/shutdown` des EVA-Servers. `interfaces.presence_state` fusioniert die eingehende Raum-Presence mit Desk-Presence für das EVA-Profil.
+
+## EVA auf dem Windows-Haupt-PC
+
+`desktop_agent.companion` startet die modulare Qt-Anwendung in `desktop_agent/app/`
+mit dem Gothic-Anime-Charakter aus dem bereitgestellten Character Sheet,
+Taskleisten-Verankerung, kleinem Chat, Hauptmenü, lokalen Unterhaltungen und
+optionalen Screenshots eines ausgewählten Monitors.
+Sie läuft auf dem Haupt-PC und benötigt dort weder EVAs Kern noch eine Datenbank.
+Die separat gestartete `desktop_agent.companion_server`-Bridge läuft auf dem
+EVA-Rechner, stellt `/desktop/status` und `/desktop/chat` auf Port 8766 bereit und
+leitet Text/Bilder an den lokalen Ollama-Dienst weiter. Sie ist durch einen
+eigenen Token geschützt und standardmäßig an Loopback gebunden.
+
+Normale Gespräche und ausdrücklich bildschirmbezogene Anfragen werden getrennt:
+`EVA_COMPANION_CHAT_MODEL` wählt das Gesprächsmodell, `EVA_COMPANION_MODEL` das
+Bildmodell. Nur Bildschirmfragen und regelmäßige Beobachtungen erhalten Bilder;
+überflüssige Screenshots älterer Clients werden serverseitig verworfen. Kurze
+Gesprächsregeln und separate Regeln für belegbare Bilddetails ersetzen die
+frühere ausführliche Rollenbeschreibung.
+
+Der Desktop speichert eigene lokale Unterhaltungen. EVAs zentraler Langzeitspeicher,
+Identitätsfusion, Module und Stimme werden darüber noch nicht angesprochen.
+Bildschirmfreigabe ist bei jedem Start aus. Bilder werden weder als Dateien
+gespeichert noch in den Chatverlauf aufgenommen. Es gibt keine Computersteuerung.
+Installation, Windows-Paket und Modellwahl: [DESKTOP_COMPANION.md](DESKTOP_COMPANION.md).
 
 ## Sicherheitsgrenzen
 

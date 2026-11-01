@@ -1,0 +1,20 @@
+[Unit]
+Description=EVA Desktop Companion Bridge
+After=network-online.target ollama.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=kati
+WorkingDirectory=/home/kati/opt/eva
+EnvironmentFile=/home/kati/opt/eva/.env
+ExecStart=/home/kati/opt/eva/.venv/bin/python -m desktop_agent.companion_server
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+
+[Install]
+WantedBy=multi-user.target

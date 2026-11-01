@@ -43,12 +43,12 @@ Wikipedia-Überblicke werden direkt aus dem deutschen Quelltext erstellt. Andere
 | `module/` | Enthält direkt ansprechbare EVA-Funktionen. |
 | `memory/` | Speichert Gesprächszustand und Langzeitinformationen. |
 | `rag/` | Sucht Wissen in PostgreSQL und pgvector. |
+| `rag/json_store.py` | Enthält den ausdrücklich aktivierbaren JSON-RAG-Fallback. |
 | `module/web_search_module.py` | Ruft Websuche, Wikipedia, URLs und Wetter ab. |
 | `voice/` | Enthält die aktuelle lokale XTTS-Sprachausgabe. |
 | `interfaces/` | Stellt HTTP- und Presence-Schnittstellen bereit. |
 | `visual_cortex/` | Verarbeitet Kamera-, Identitäts- und Präsenzdaten. |
-| `desktop_agent/` | Meldet Schreibtisch-Präsenz von einem getrennten Rechner. |
-| `actions/` | Kapselt System-, Dienst- und Geräteaktionen. |
+| `desktop_agent/` | Enthält Windows-Begleiter, Server-Bridge und optionale Schreibtisch-Präsenz. |
 | `tools/` | Enthält Diagnose-, Benchmark- und Importprogramme. |
 | `tests/` | Prüft Verhalten ohne echte Änderungen an Geräten. |
 | `docs/` | Enthält Anleitungen für die einzelnen Teilsysteme. |

@@ -2,9 +2,10 @@ import json
 import logging
 import os
 import tempfile
-from datetime import datetime, timezone
+from collections.abc import Callable
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 try:
     import ollama
@@ -24,6 +25,7 @@ DEFAULT_MODEL = "mistral-nemo:12b-instruct-2407-q4_K_S"
 # ---------------------------------------------------------------------------
 # JSON persistence
 # ---------------------------------------------------------------------------
+
 
 def _safe_json_load(path: Path) -> dict:
     try:
@@ -120,6 +122,7 @@ def save_state(
 # Generic search helpers
 # ---------------------------------------------------------------------------
 
+
 def _value_matches(
     value: Any,
     query: str,
@@ -133,16 +136,10 @@ def _value_matches(
         return query in value.lower()
 
     if isinstance(value, list):
-        return any(
-            _value_matches(item, query)
-            for item in value
-        )
+        return any(_value_matches(item, query) for item in value)
 
     if isinstance(value, dict):
-        return any(
-            _value_matches(item, query)
-            for item in value.values()
-        )
+        return any(_value_matches(item, query) for item in value.values())
 
     return False
 
@@ -181,9 +178,7 @@ def _priority_value(
 def _project_sort_key(
     project: dict,
 ) -> tuple[int, float]:
-    priority = _priority_value(
-        project.get("priority")
-    )
+    priority = _priority_value(project.get("priority"))
 
     timestamp = 0.0
 
@@ -198,9 +193,7 @@ def _project_sort_key(
             continue
 
         try:
-            timestamp = datetime.fromisoformat(
-                raw.replace("Z", "+00:00")
-            ).timestamp()
+            timestamp = datetime.fromisoformat(raw.replace("Z", "+00:00")).timestamp()
             break
 
         except ValueError:
@@ -215,6 +208,7 @@ def _project_sort_key(
 # ---------------------------------------------------------------------------
 # History processing
 # ---------------------------------------------------------------------------
+
 
 def _clean_history(
     history: list[dict],
@@ -265,17 +259,9 @@ def _extract_sentences(
     text: str,
 ) -> list[str]:
     # Bewusst einfach gehalten, damit keine NLP-Bibliothek nötig ist.
-    separators = (
-        text.replace("?", ".")
-        .replace("!", ".")
-        .replace("\n", ".")
-    )
+    separators = text.replace("?", ".").replace("!", ".").replace("\n", ".")
 
-    return [
-        sentence.strip()
-        for sentence in separators.split(".")
-        if sentence.strip()
-    ]
+    return [sentence.strip() for sentence in separators.split(".") if sentence.strip()]
 
 
 def _extract_learning_items(
@@ -302,10 +288,7 @@ def _extract_learning_items(
         text = entry.get("content", "")
         lower = text.lower()
 
-        if not any(
-            keyword in lower
-            for keyword in keywords
-        ):
+        if not any(keyword in lower for keyword in keywords):
             continue
 
         for sentence in _extract_sentences(text):
@@ -313,10 +296,7 @@ def _extract_learning_items(
 
             if (
                 len(sentence) > 10
-                and any(
-                    keyword in lower_sentence
-                    for keyword in keywords
-                )
+                and any(keyword in lower_sentence for keyword in keywords)
                 and sentence not in items
             ):
                 items.append(sentence)
@@ -338,11 +318,7 @@ def _extract_important_points(
         for sentence in _extract_sentences(text):
             lower = sentence.lower()
 
-            if (
-                "sehr wichtig" in lower
-                or "wichtig" in lower
-                or "dringend" in lower
-            ):
+            if "sehr wichtig" in lower or "wichtig" in lower or "dringend" in lower:
                 if sentence not in items:
                     items.append(sentence)
 
@@ -353,21 +329,18 @@ def _extract_important_points(
 # Chat memory
 # ---------------------------------------------------------------------------
 
+
 def save_chat_history(
     state: dict,
     path: str | Path = MEMORY_PATH,
 ) -> None:
-    history = _clean_history(
-        state.get("history", [])
-    )
+    history = _clean_history(state.get("history", []))
 
     if not history:
         return
 
     memory_data = load_memory(path)
-    timestamp = datetime.now(
-        timezone.utc
-    ).isoformat()
+    timestamp = datetime.now(UTC).isoformat()
 
     # Nur die aktuelle Gesprächseinheit speichern.
     memory_data.setdefault(
@@ -380,12 +353,8 @@ def save_chat_history(
         }
     )
 
-    learning_items = _extract_learning_items(
-        history
-    )
-    important_points = _extract_important_points(
-        history
-    )
+    learning_items = _extract_learning_items(history)
+    important_points = _extract_important_points(history)
 
     if learning_items:
         goals = memory_data.setdefault(
@@ -416,6 +385,7 @@ def save_chat_history(
 # ---------------------------------------------------------------------------
 # Project parsing / merging
 # ---------------------------------------------------------------------------
+
 
 def _find_json_object(
     text: str,
@@ -450,9 +420,7 @@ def _find_json_object(
                 depth -= 1
 
                 if depth == 0:
-                    return text[
-                        start : index + 1
-                    ]
+                    return text[start : index + 1]
 
         escape = False
 
@@ -462,22 +430,22 @@ def _find_json_object(
 def _parse_project_result(
     raw: str,
 ) -> dict | None:
-    json_text = _find_json_object(
-        raw
-    )
+    json_text = _find_json_object(raw)
 
     if not json_text:
         return None
 
     try:
-        parsed = json.loads(
-            json_text
-        )
+        parsed = json.loads(json_text)
 
-        return parsed if isinstance(
-            parsed,
-            dict,
-        ) else None
+        return (
+            parsed
+            if isinstance(
+                parsed,
+                dict,
+            )
+            else None
+        )
 
     except json.JSONDecodeError:
         return None
@@ -505,10 +473,7 @@ def _merge_dicts(
     result = dict(old)
 
     for key, value in new.items():
-        if (
-            isinstance(value, dict)
-            and isinstance(result.get(key), dict)
-        ):
+        if isinstance(value, dict) and isinstance(result.get(key), dict):
             result[key] = _merge_dicts(
                 result[key],
                 value,
@@ -529,9 +494,7 @@ def _store_project_result(
     if project.get("created") is False:
         return
 
-    project_name = str(
-        project.get("name", "")
-    ).strip()
+    project_name = str(project.get("name", "")).strip()
 
     if not project_name:
         return
@@ -546,10 +509,7 @@ def _store_project_result(
         (
             item
             for item in projects
-            if str(
-                item.get("name", "")
-            ).strip().lower()
-            == project_name.lower()
+            if str(item.get("name", "")).strip().lower() == project_name.lower()
         ),
         None,
     )
@@ -565,25 +525,16 @@ def _store_project_result(
     merged["name"] = project_name
     merged.setdefault(
         "created_at",
-        datetime.now(
-            timezone.utc
-        ).isoformat(),
+        datetime.now(UTC).isoformat(),
     )
-    merged["updated_at"] = datetime.now(
-        timezone.utc
-    ).isoformat()
+    merged["updated_at"] = datetime.now(UTC).isoformat()
 
     # Projekt ersetzen, aber Reihenfolge erhalten.
     replaced = False
     new_projects: list[dict] = []
 
     for item in projects:
-        if (
-            str(
-                item.get("name", "")
-            ).strip().lower()
-            == project_name.lower()
-        ):
+        if str(item.get("name", "")).strip().lower() == project_name.lower():
             new_projects.append(merged)
             replaced = True
         else:
@@ -666,15 +617,19 @@ def search_projects(
 # State updates
 # ---------------------------------------------------------------------------
 
+
 def delete_state_history(
     path: str | Path = STATE_PATH,
 ) -> None:
     state = load_state(path)
 
-    if state.pop(
-        "history",
-        None,
-    ) is not None:
+    if (
+        state.pop(
+            "history",
+            None,
+        )
+        is not None
+    ):
         save_state(
             state,
             path,
@@ -687,9 +642,7 @@ def modify_state(
 ) -> dict:
     state = load_state(path)
 
-    new_state = modifier(
-        state
-    ) or state
+    new_state = modifier(state) or state
 
     save_state(
         new_state,
@@ -708,9 +661,7 @@ def ai_modifier(
     )
 
     try:
-        bond = float(
-            state["bond_level"]
-        )
+        bond = float(state["bond_level"])
     except (TypeError, ValueError):
         bond = 0.2
 
@@ -724,16 +675,12 @@ def ai_modifier(
         [],
     )
 
-    state["history"] = _clean_history(
-        state["history"]
-    )
+    state["history"] = _clean_history(state["history"])
 
     # Im State darf der kurzfristige Verlauf begrenzt sein.
     # Der Langzeitverlauf liegt separat in memory.json.
     if len(state["history"]) > 20:
-        state["history"] = state[
-            "history"
-        ][-20:]
+        state["history"] = state["history"][-20:]
 
     return state
 
@@ -782,10 +729,7 @@ def reflect(
         return ""
 
     if ollama is None:
-        return (
-            "Ollama ist nicht installiert. "
-            "Reflexion ist nicht verfügbar."
-        )
+        return "Ollama ist nicht installiert. Reflexion ist nicht verfügbar."
 
     try:
         response = ollama.chat(
@@ -805,14 +749,10 @@ def reflect(
             keep_alive=os.getenv("EVA_OLLAMA_KEEP_ALIVE", "30m"),
         )
 
-        return str(
-            response["message"]["content"]
-        ).strip()
+        return str(response["message"]["content"]).strip()
 
     except Exception:
-        logger.exception(
-            "Reflexion fehlgeschlagen."
-        )
+        logger.exception("Reflexion fehlgeschlagen.")
         return ""
 
 
@@ -868,9 +808,7 @@ def project_entry(
     )
 
     if not history or ollama is None:
-        return {
-            "created": False
-        }
+        return {"created": False}
 
     try:
         response = ollama.chat(
@@ -890,29 +828,22 @@ def project_entry(
             keep_alive=os.getenv("EVA_OLLAMA_KEEP_ALIVE", "30m"),
         )
 
-        parsed = _parse_project_result(
-            response["message"]["content"].strip()
-        )
+        parsed = _parse_project_result(response["message"]["content"].strip())
 
         if not parsed:
-            return {
-                "created": False
-            }
+            return {"created": False}
 
         return parsed
 
     except Exception:
-        logger.exception(
-            "Projektanalyse fehlgeschlagen."
-        )
-        return {
-            "created": False
-        }
+        logger.exception("Projektanalyse fehlgeschlagen.")
+        return {"created": False}
 
 
 # ---------------------------------------------------------------------------
 # Reflection pipeline
 # ---------------------------------------------------------------------------
+
 
 def run_reflection_and_save(
     *,
@@ -947,14 +878,10 @@ def run_reflection_and_save(
         "project_saved": False,
     }
 
-    timestamp = datetime.now(
-        timezone.utc
-    ).isoformat()
+    timestamp = datetime.now(UTC).isoformat()
 
     # 2. Reflexion
-    reflection_text = reflect(
-        model=model
-    )
+    reflection_text = reflect(model=model)
 
     if reflection_text:
         memory_data = load_memory()
@@ -974,28 +901,17 @@ def run_reflection_and_save(
         )
 
         # Reflexionshistorie begrenzen.
-        memory_data["reflections"] = (
-            memory_data["reflections"][-100:]
-        )
+        memory_data["reflections"] = memory_data["reflections"][-100:]
 
-        save_memory(
-            memory_data
-        )
+        save_memory(memory_data)
 
         result["reflection_saved"] = True
 
     # 3. Projektanalyse
-    project_result = project_entry(
-        model=model
-    )
+    project_result = project_entry(model=model)
 
-    if (
-        isinstance(project_result, dict)
-        and project_result.get("created") is not False
-    ):
-        _store_project_result(
-            project_result
-        )
+    if isinstance(project_result, dict) and project_result.get("created") is not False:
+        _store_project_result(project_result)
         result["project_saved"] = True
 
     return result

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import argparse
 import time
-from typing import Callable
+from collections.abc import Callable
 
 from core.eva import EVA
 
@@ -29,8 +29,11 @@ def main() -> None:
         print("Full RAG retrieval: unavailable (RAG backend/model not ready)")
     else:
         embedding, embedding_ms = measure(lambda: eva.rag.embedding_client.embed(args.query))
-        _rows, vector_ms = measure(lambda: eva.rag.store.search(
-            embedding, top_k=eva.rag_top_k, threshold=float(eva.cfg.get("rag_threshold", 0.45))))
+        _rows, vector_ms = measure(
+            lambda: eva.rag.store.search(
+                embedding, top_k=eva.rag_top_k, threshold=float(eva.cfg.get("rag_threshold", 0.45))
+            )
+        )
         _context, rag_ms = measure(lambda: eva._build_rag_context(args.query))
         print(f"Query embedding: {embedding_ms:.1f} ms")
         print(f"Vector retrieval: {vector_ms:.1f} ms")
@@ -43,7 +46,9 @@ def main() -> None:
         first_token_ms = (time.perf_counter() - started) * 1000.0
         for _chunk in stream:
             pass
-        print(f"Ollama first-token latency: {first_token_ms:.1f} ms ({len(first)} chars first chunk)")
+        print(
+            f"Ollama first-token latency: {first_token_ms:.1f} ms ({len(first)} chars first chunk)"
+        )
     except Exception as exc:
         print(f"Ollama first-token latency: unavailable ({exc})")
     print(f"Total benchmark latency: {(time.perf_counter() - total_started) * 1000.0:.1f} ms")

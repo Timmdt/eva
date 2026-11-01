@@ -17,7 +17,9 @@ def nvidia_memory_mb() -> dict[str, int | str | None]:
         result = subprocess.run(command, capture_output=True, text=True, timeout=5, check=False)
         if result.returncode != 0 or not result.stdout.strip():
             raise RuntimeError(result.stderr.strip())
-        name, total, used, free = [part.strip() for part in result.stdout.splitlines()[0].split(",")]
+        name, total, used, free = [
+            part.strip() for part in result.stdout.splitlines()[0].split(",")
+        ]
         return {"gpu": name, "total_mb": int(total), "used_mb": int(used), "free_mb": int(free)}
     except (OSError, ValueError, RuntimeError, subprocess.TimeoutExpired):
         return {"gpu": None, "total_mb": 0, "used_mb": 0, "free_mb": 0}
@@ -65,7 +67,10 @@ class VoiceMetrics:
     def snapshot(self) -> dict[str, float | int]:
         with self._lock:
             origin = self.started_at
-            elapsed = lambda point: round((point - origin) * 1000.0, 1) if origin and point else 0.0
+
+            def elapsed(point):
+                return round((point - origin) * 1000.0, 1) if origin and point else 0.0
+
             return {
                 "time_to_first_text_chunk_ms": elapsed(self.first_text_chunk_at),
                 "tts_time_to_first_audio_ms": elapsed(self.first_audio_at),

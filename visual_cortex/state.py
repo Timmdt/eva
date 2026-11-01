@@ -19,8 +19,12 @@ class VisualState:
     confidence: float = 0.0
 
     def to_dict(self) -> dict[str, object]:
-        return {"state": self.state.value, "presence": self.presence,
-                "identity": self.identity, "confidence": self.confidence}
+        return {
+            "state": self.state.value,
+            "presence": self.presence,
+            "identity": self.identity,
+            "confidence": self.confidence,
+        }
 
 
 @dataclass(frozen=True)
@@ -31,7 +35,7 @@ class VisualConfig:
     recognition_threshold: float = 0.82
 
     @classmethod
-    def from_env(cls) -> "VisualConfig":
+    def from_env(cls) -> VisualConfig:
         truthy = {"1", "true", "yes", "on"}
         return cls(
             enabled=os.getenv("EVA_VISUAL_CORTEX_ENABLED", "false").lower() in truthy,

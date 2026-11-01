@@ -8,12 +8,15 @@ import wave
 from array import array
 from pathlib import Path
 
-from .config import VoiceConfig
 from core.env_loader import load_env_file
+
+from .config import VoiceConfig
 
 
 def _arguments() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Validate EVA voice references and cache XTTS conditioning.")
+    parser = argparse.ArgumentParser(
+        description="Validate EVA voice references and cache XTTS conditioning."
+    )
     parser.add_argument("references", nargs="*", type=Path)
     parser.add_argument("--validate-only", action="store_true")
     return parser.parse_args()
@@ -22,6 +25,7 @@ def _arguments() -> argparse.Namespace:
 def _ensure_xtts_python(config: VoiceConfig) -> None:
     try:
         import TTS  # noqa: F401
+
         return
     except ImportError:
         pass
@@ -76,7 +80,10 @@ def main() -> int:
     references = [path if path.is_absolute() else root / path for path in args.references]
     references = references or list(config.references)
     if not references:
-        print("Keine Referenz konfiguriert. Setze EVA_VOICE_REFERENCE oder übergib eine WAV-Datei.", file=sys.stderr)
+        print(
+            "Keine Referenz konfiguriert. Setze EVA_VOICE_REFERENCE oder übergib eine WAV-Datei.",
+            file=sys.stderr,
+        )
         return 2
     for reference in references:
         info = inspect_wav(reference)
@@ -93,6 +100,7 @@ def main() -> int:
         return 0
     _ensure_xtts_python(config)
     from .xtts_engine import XTTSEngine
+
     engine = XTTSEngine(
         model_name=config.model,
         references=references,

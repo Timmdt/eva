@@ -11,7 +11,6 @@ from voice.config import VoiceConfig
 from voice.metrics import nvidia_memory_mb
 from voice.voice_service import VoiceService
 
-
 TEXTS = [
     "Hallo, schön dich zu sehen.",
     "Ich habe die aktuellen Informationen geprüft und dabei etwas Interessantes gefunden.",

@@ -2,12 +2,11 @@ from __future__ import annotations
 
 import logging
 import subprocess
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable
 
 from core.activity import INGESTION_LOCK, activity_registry
-
 
 logger = logging.getLogger(__name__)
 
@@ -29,10 +28,17 @@ class ShutdownDecision:
 class SafeShutdown:
     """Server-local safety gates for authenticated remote shutdown requests."""
 
-    def __init__(self, *, feature_enabled: bool, allow_shutdown: bool,
-                 keep_awake_file: Path, inhibit_file: Path, boot_grace: float = 600.0,
-                 uptime: Callable[[], float] = system_uptime,
-                 executor: Callable[[], None] | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        feature_enabled: bool,
+        allow_shutdown: bool,
+        keep_awake_file: Path,
+        inhibit_file: Path,
+        boot_grace: float = 600.0,
+        uptime: Callable[[], float] = system_uptime,
+        executor: Callable[[], None] | None = None,
+    ) -> None:
         self.feature_enabled, self.allow_shutdown = feature_enabled, allow_shutdown
         self.keep_awake_file, self.inhibit_file = keep_awake_file, inhibit_file
         self.boot_grace, self.uptime = boot_grace, uptime
@@ -57,8 +63,9 @@ class SafeShutdown:
             return ShutdownDecision(False, "Keep-Awake aktiv")
         if self.uptime() < self.boot_grace:
             return ShutdownDecision(False, "Boot-Grace aktiv")
-        return ShutdownDecision(True, "alle Sicherheitsbedingungen erfüllt",
-                                dry_run=not self.allow_shutdown)
+        return ShutdownDecision(
+            True, "alle Sicherheitsbedingungen erfüllt", dry_run=not self.allow_shutdown
+        )
 
     def request(self) -> ShutdownDecision:
         decision = self.evaluate()

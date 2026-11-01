@@ -108,7 +108,8 @@ class ServerControlTest(unittest.TestCase):
 
                     headers = {"Authorization": "Bearer web-secret"}
                     history_request = urllib.request.Request(
-                        base + "/api/history", headers=headers,
+                        base + "/api/history",
+                        headers=headers,
                     )
                     with urllib.request.urlopen(history_request, timeout=2) as response:
                         history = json.load(response)
@@ -131,7 +132,8 @@ class ServerControlTest(unittest.TestCase):
                     )
                     audio_url = events[-1]["audio_url"]
                     audio_request = urllib.request.Request(
-                        base + audio_url, headers=headers,
+                        base + audio_url,
+                        headers=headers,
                     )
                     with urllib.request.urlopen(audio_request, timeout=2) as response:
                         self.assertEqual(response.read(), b"fake-mp3-Test")
@@ -146,9 +148,12 @@ class ServerControlTest(unittest.TestCase):
             inhibit = Path(directory, "inhibit")
             calls = []
             shutdown = SafeShutdown(
-                feature_enabled=True, allow_shutdown=False,
-                keep_awake_file=keep, inhibit_file=inhibit,
-                boot_grace=10, uptime=lambda: 100,
+                feature_enabled=True,
+                allow_shutdown=False,
+                keep_awake_file=keep,
+                inhibit_file=inhibit,
+                boot_grace=10,
+                uptime=lambda: 100,
                 executor=lambda: calls.append(True),
             )
             keep.touch()

@@ -16,8 +16,9 @@ def main() -> None:
     if not config.enabled:
         print("Visual Cortex is disabled (EVA_VISUAL_CORTEX_ENABLED=false).")
         return
-    store = IdentityStore(Path(os.getenv("EVA_FACE_STORE", "data/faces.json")),
-                          threshold=config.recognition_threshold)
+    store = IdentityStore(
+        Path(os.getenv("EVA_FACE_STORE", "data/faces.json")), threshold=config.recognition_threshold
+    )
     cortex = VisualCortex(FacePresenceDetector(), store)
     interval = 1.0 / max(0.1, min(5.0, float(os.getenv("EVA_VISUAL_FPS", "2"))))
     with DesktopCamera(config.camera_device) as camera:

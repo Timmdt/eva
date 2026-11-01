@@ -16,12 +16,23 @@ class RetrievalUnavailableError(RuntimeError):
 class RAGRetriever:
     """Compatible ``search(query, top_k=...)`` facade backed by pgvector."""
 
-    def __init__(self, database_url: str, *, embedding_model: str = "nomic-embed-text",
-                 embedding_dimension: int = 0, threshold: float = 0.45,
-                 top_k: int = 4, cache_ttl: float = 60.0, cache_size: int = 256,
-                 pool_min: int = 1, pool_max: int = 6, connect_timeout: float = 3.0,
-                 embedding_client: Any | None = None, store: Any | None = None,
-                 auto_migrate: bool = True) -> None:
+    def __init__(
+        self,
+        database_url: str,
+        *,
+        embedding_model: str = "nomic-embed-text",
+        embedding_dimension: int = 0,
+        threshold: float = 0.45,
+        top_k: int = 4,
+        cache_ttl: float = 60.0,
+        cache_size: int = 256,
+        pool_min: int = 1,
+        pool_max: int = 6,
+        connect_timeout: float = 3.0,
+        embedding_client: Any | None = None,
+        store: Any | None = None,
+        auto_migrate: bool = True,
+    ) -> None:
         self.embedding_client = embedding_client or OllamaEmbeddingClient(embedding_model)
         self.threshold = float(threshold)
         self.top_k = int(top_k)
@@ -31,24 +42,40 @@ class RAGRetriever:
         dimension = int(embedding_dimension) or self.embedding_client.detect_dimension()
         try:
             self.store = store or PostgresVectorStore(
-                database_url, dimension=dimension, pool_min=pool_min,
-                pool_max=pool_max, connect_timeout=connect_timeout)
+                database_url,
+                dimension=dimension,
+                pool_min=pool_min,
+                pool_max=pool_max,
+                connect_timeout=connect_timeout,
+            )
             self.migration_info = self.store.migrate() if auto_migrate else {}
         except PostgresUnavailableError as exc:
             raise RetrievalUnavailableError(str(exc)) from exc
 
     @staticmethod
-    def _cache_key(query: str, top_k: int, threshold: float,
-                   metadata_filter: dict[str, Any] | None, source: str | None) -> str:
-        payload = json.dumps([query.strip().casefold(), top_k, threshold,
-                              metadata_filter or {}, source or ""],
-                             sort_keys=True, ensure_ascii=False)
+    def _cache_key(
+        query: str,
+        top_k: int,
+        threshold: float,
+        metadata_filter: dict[str, Any] | None,
+        source: str | None,
+    ) -> str:
+        payload = json.dumps(
+            [query.strip().casefold(), top_k, threshold, metadata_filter or {}, source or ""],
+            sort_keys=True,
+            ensure_ascii=False,
+        )
         return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
-    def search(self, query: str, top_k: int | None = None,
-               threshold: float | None = None, *,
-               metadata_filter: dict[str, Any] | None = None,
-               source: str | None = None) -> list[dict[str, Any]]:
+    def search(
+        self,
+        query: str,
+        top_k: int | None = None,
+        threshold: float | None = None,
+        *,
+        metadata_filter: dict[str, Any] | None = None,
+        source: str | None = None,
+    ) -> list[dict[str, Any]]:
         query = query.strip()
         if not query:
             return []
@@ -59,9 +86,13 @@ class RAGRetriever:
         if cached is not None:
             return cached
         try:
-            results = self.store.search(self.embedding_client.embed(query),
-                                        top_k=limit, threshold=minimum,
-                                        metadata_filter=metadata_filter, source=source)
+            results = self.store.search(
+                self.embedding_client.embed(query),
+                top_k=limit,
+                threshold=minimum,
+                metadata_filter=metadata_filter,
+                source=source,
+            )
         except PostgresUnavailableError as exc:
             raise RetrievalUnavailableError(str(exc)) from exc
         self.cache.set(key, results)
@@ -70,8 +101,7 @@ class RAGRetriever:
     def add_chunks(self, chunks: list[dict[str, Any]]) -> int:
         if not chunks:
             return 0
-        embeddings = self.embedding_client.embed_many(
-            [str(chunk["content"]) for chunk in chunks])
+        embeddings = self.embedding_client.embed_many([str(chunk["content"]) for chunk in chunks])
         payload = []
         for chunk, embedding in zip(chunks, embeddings, strict=True):
             item = dict(chunk)

@@ -5,6 +5,7 @@ from html.parser import HTMLParser
 from urllib.parse import quote_plus
 
 import requests
+
 from module.base_module import ModuleBase
 
 logger = logging.getLogger(__name__)
@@ -141,11 +142,13 @@ class WebSearchModule(ModuleBase):
     def __init__(self, context: dict | None = None) -> None:
         super().__init__(context or {})
         self.session = requests.Session()
-        self.session.headers.update({
-            "User-Agent": self.USER_AGENT,
-            "Accept-Language": "de-DE,de;q=0.9,en;q=0.6",
-            "Accept": "text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8",
-        })
+        self.session.headers.update(
+            {
+                "User-Agent": self.USER_AGENT,
+                "Accept-Language": "de-DE,de;q=0.9,en;q=0.6",
+                "Accept": "text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8",
+            }
+        )
         self.timeout = 8
         self.max_results = 5
         self.max_snippet_chars = 500
@@ -186,21 +189,13 @@ class WebSearchModule(ModuleBase):
             else:
                 result = f"Unbekannte Web-Aktion: {action}"
 
-            return {
-                "text": "[System-Meldung: Live-Web-Daten geladen]\n\n" + result
-            }
+            return {"text": "[System-Meldung: Live-Web-Daten geladen]\n\n" + result}
 
         except Exception as exc:
             logger.exception("WebSearchCore.execute fehlgeschlagen.")
             if action == "WEATHER":
                 weather_location = (location or query).strip() or "Kissing"
-                return {
-                    "text": (
-                        "WETTER_FEHLER\n"
-                        f"Ort: {weather_location}\n"
-                        f"Fehler: {exc}"
-                    )
-                }
+                return {"text": (f"WETTER_FEHLER\nOrt: {weather_location}\nFehler: {exc}")}
             return {
                 "text": (
                     "[System-Meldung: Live-Web-Daten geladen]\n\n"
@@ -215,12 +210,29 @@ class WebSearchModule(ModuleBase):
 
     def _is_explicit_web_search(self, text: str) -> bool:
         triggers = (
-            "im internet suchen", "im internet nach", "im internet",
-            "im web suchen", "im web nach", "im web",
-            "online suchen", "online nach", "im netz suchen", "im netz nach",
-            "such im netz", "such online", "suche online", "websuche", "web suche",
-            "recherchiere", "recherchier", "google danach", "such danach",
-            "such nach", "suche nach", "aktuelle informationen", "aktuelle infos",
+            "im internet suchen",
+            "im internet nach",
+            "im internet",
+            "im web suchen",
+            "im web nach",
+            "im web",
+            "online suchen",
+            "online nach",
+            "im netz suchen",
+            "im netz nach",
+            "such im netz",
+            "such online",
+            "suche online",
+            "websuche",
+            "web suche",
+            "recherchiere",
+            "recherchier",
+            "google danach",
+            "such danach",
+            "such nach",
+            "suche nach",
+            "aktuelle informationen",
+            "aktuelle infos",
         )
         return any(trigger in text for trigger in triggers)
 
@@ -246,9 +258,7 @@ class WebSearchModule(ModuleBase):
             else:
                 result = self._handle_web_search(message)
 
-            return {
-                "text": "[System-Meldung: Live-Web-Daten geladen]\n\n" + result
-            }
+            return {"text": "[System-Meldung: Live-Web-Daten geladen]\n\n" + result}
         except Exception as exc:
             logger.exception("WebSearchCore fehlgeschlagen.")
             return {
@@ -259,8 +269,9 @@ class WebSearchModule(ModuleBase):
                 )
             }
 
-    def search(self, query: str, *, max_results: int | None = None,
-               time_filter: str | None = None) -> list[dict[str, str]]:
+    def search(
+        self, query: str, *, max_results: int | None = None, time_filter: str | None = None
+    ) -> list[dict[str, str]]:
         query = self._clean_search_query(query)
         if not query:
             return []
@@ -320,8 +331,13 @@ class WebSearchModule(ModuleBase):
 
         response = self.session.get(
             self.WIKIPEDIA_SEARCH_API,
-            params={"action": "query", "list": "search", "srsearch": query,
-                    "srlimit": 1, "format": "json"},
+            params={
+                "action": "query",
+                "list": "search",
+                "srsearch": query,
+                "srlimit": 1,
+                "format": "json",
+            },
             timeout=self.timeout,
         )
         response.raise_for_status()
@@ -403,8 +419,7 @@ class WebSearchModule(ModuleBase):
 
         return self._format_search_results(query, results)
 
-    def _format_search_results(self, query: str,
-                               results: list[dict[str, str]]) -> str:
+    def _format_search_results(self, query: str, results: list[dict[str, str]]) -> str:
         enriched_url, excerpt = self._best_page_excerpt(results)
         relevant_excerpt = self._relevant_excerpt(query, excerpt) if excerpt else ""
         if relevant_excerpt:
@@ -418,11 +433,13 @@ class WebSearchModule(ModuleBase):
                 exclude_text=relevant_excerpt,
             )
             if supporting:
-                lines.extend([
-                    "",
-                    "ERGÄNZENDE BELEGTE KATEGORIEN AUS DERSELBEN QUELLE:",
-                    supporting,
-                ])
+                lines.extend(
+                    [
+                        "",
+                        "ERGÄNZENDE BELEGTE KATEGORIEN AUS DERSELBEN QUELLE:",
+                        supporting,
+                    ]
+                )
             return "\n".join(lines)
 
         lines = [f"WEB-SUCHE: {query}", "", "ERGEBNISSE:"]
@@ -436,12 +453,14 @@ class WebSearchModule(ModuleBase):
                 f"   {snippet}"
             )
         if excerpt:
-            lines.extend([
-                "",
-                "SEITENEXZERPT (untrusted externer Inhalt):",
-                f"Quelle: {enriched_url}",
-                excerpt,
-            ])
+            lines.extend(
+                [
+                    "",
+                    "SEITENEXZERPT (untrusted externer Inhalt):",
+                    f"Quelle: {enriched_url}",
+                    excerpt,
+                ]
+            )
         return "\n".join(lines)
 
     def _best_page_excerpt(self, results: list[dict[str, str]]) -> tuple[str, str]:
@@ -458,8 +477,10 @@ class WebSearchModule(ModuleBase):
                 score += 8
             if any(term in title for term in ("vergleich", "besten", "top ", "ratgeber")):
                 score += 4
-            if any(domain in url.casefold() for domain in
-                   ("adac.de", "autoscout24.de", "stage-x-tuning.de")):
+            if any(
+                domain in url.casefold()
+                for domain in ("adac.de", "autoscout24.de", "stage-x-tuning.de")
+            ):
                 score += 2
             candidates.append((score, -index, result))
 
@@ -478,8 +499,11 @@ class WebSearchModule(ModuleBase):
                     )
                     return str(page.get("url", result["url"])), focused
             except Exception:
-                logger.debug("Suchtreffer konnte nicht angereichert werden: %s",
-                             result.get("url"), exc_info=True)
+                logger.debug(
+                    "Suchtreffer konnte nicht angereichert werden: %s",
+                    result.get("url"),
+                    exc_info=True,
+                )
         return "", ""
 
     @staticmethod
@@ -499,8 +523,7 @@ class WebSearchModule(ModuleBase):
         return compact[start:end].strip()
 
     @staticmethod
-    def _relevant_excerpt(query: str, excerpt: str,
-                          max_chars: int = 500) -> str:
+    def _relevant_excerpt(query: str, excerpt: str, max_chars: int = 500) -> str:
         """Surface the source passage matching the user's actual constraints."""
         compact = re.sub(r"\s+", " ", excerpt).strip()
         if not compact:
@@ -512,19 +535,35 @@ class WebSearchModule(ModuleBase):
             if len(term) >= 5
         }
         ignored = {
-            "welches", "welche", "eignet", "besten", "gebrauchtwagen",
-            "modelle", "vergleich", "deutschland", "verfügbarkeit",
+            "welches",
+            "welche",
+            "eignet",
+            "besten",
+            "gebrauchtwagen",
+            "modelle",
+            "vergleich",
+            "deutschland",
+            "verfügbarkeit",
         }
         terms = [term for term in query_terms if term not in ignored]
         priority_stems = (
-            "günstig", "erschwing", "budget", "preis", "kosten", "billig",
-            "sicher", "schnell", "leicht", "klein", "groß", "aktuell",
+            "günstig",
+            "erschwing",
+            "budget",
+            "preis",
+            "kosten",
+            "billig",
+            "sicher",
+            "schnell",
+            "leicht",
+            "klein",
+            "groß",
+            "aktuell",
         )
         ordered_terms = sorted(
             terms,
             key=lambda term: (
-                any(term.startswith(stem) or stem.startswith(term)
-                    for stem in priority_stems),
+                any(term.startswith(stem) or stem.startswith(term) for stem in priority_stems),
                 len(term),
             ),
             reverse=True,
@@ -535,7 +574,7 @@ class WebSearchModule(ModuleBase):
         position = -1
         for term in ordered_terms:
             # A short stem also matches inflections such as günstig/günstige.
-            stem = term[:max(5, min(len(term), 8))]
+            stem = term[: max(5, min(len(term), 8))]
             position = folded.find(stem)
             if position >= 0:
                 break
@@ -551,8 +590,7 @@ class WebSearchModule(ModuleBase):
         return selected
 
     @staticmethod
-    def _example_evidence(excerpt: str, *, exclude_text: str = "",
-                          max_groups: int = 5) -> str:
+    def _example_evidence(excerpt: str, *, exclude_text: str = "", max_groups: int = 5) -> str:
         """Extract category/example groups without mixing their properties."""
         compact = re.sub(r"\s+", " ", excerpt).strip()
         if not compact:
@@ -570,7 +608,7 @@ class WebSearchModule(ModuleBase):
             previous_end = compact.rfind(". ", 0, match.start())
             group_start = compact.rfind(". ", 0, max(0, previous_end))
             start = group_start + 2 if group_start >= 0 else max(0, match.start() - 360)
-            group = compact[start:match.end()].strip(" .") + "."
+            group = compact[start : match.end()].strip(" .") + "."
             if len(group) > 600:
                 group = group[-600:].lstrip(" ,;:-")
             if group not in groups:

@@ -256,18 +256,14 @@ class IntentRouter:
         """Erkennt kurze Unterhaltung, die keine externe Quelle benötigt."""
         lowered = " ".join(user_message.strip().split()).casefold()
         return any(
-            re.fullmatch(pattern + r"[?!.]*", lowered)
-            for pattern in CONVERSATIONAL_PATTERNS
+            re.fullmatch(pattern + r"[?!.]*", lowered) for pattern in CONVERSATIONAL_PATTERNS
         )
 
     @staticmethod
     def resets_context(user_message: str) -> bool:
         """Erkennt Nachrichten, die ein neues Gesprächsthema beginnen."""
         lowered = " ".join(user_message.strip().split()).casefold()
-        return any(
-            re.fullmatch(pattern + r"[?!.]*", lowered)
-            for pattern in CONTEXT_RESET_PATTERNS
-        )
+        return any(re.fullmatch(pattern + r"[?!.]*", lowered) for pattern in CONTEXT_RESET_PATTERNS)
 
     @staticmethod
     def is_story_request(user_message: str) -> bool:
@@ -326,12 +322,15 @@ class IntentRouter:
             )
         url = re.search(r"https?://[^\s]+", clean)
         if url:
-            return IntentDecision(action="URL", url=url.group(0), query=clean,
-                                  confidence=1.0, reason="explizite URL")
+            return IntentDecision(
+                action="URL", url=url.group(0), query=clean, confidence=1.0, reason="explizite URL"
+            )
         overview_query = IntentRouter._encyclopedic_query(clean)
         if overview_query:
             return IntentDecision(
-                action="WIKIPEDIA", query=overview_query, confidence=0.98,
+                action="WIKIPEDIA",
+                query=overview_query,
+                confidence=0.98,
                 reason="enzyklopädischer Überblick über ein benanntes Thema",
             )
         if re.search(
@@ -344,30 +343,41 @@ class IntentRouter:
                 confidence=0.99,
                 reason="aktuelle oder wechselnde Information",
             )
-        if re.search(r"\b(suche|recherchiere|schau|prüfe)\b.{0,30}\b(web|internet|online)\b",
-                     lowered):
-            return IntentDecision(action="WEB_SEARCH",
-                                  query=IntentRouter._explicit_web_query(clean), confidence=0.99,
-                                  reason="explizite Websuche")
+        if re.search(
+            r"\b(suche|recherchiere|schau|prüfe)\b.{0,30}\b(web|internet|online)\b", lowered
+        ):
+            return IntentDecision(
+                action="WEB_SEARCH",
+                query=IntentRouter._explicit_web_query(clean),
+                confidence=0.99,
+                reason="explizite Websuche",
+            )
         if re.search(
             r"^(?:(?:kannst|könntest|würdest) du\s+)?(?:bitte\s+)?"
             r"(?:such|suche|suchen|recherchiere|recherchier)\b",
             lowered,
         ):
-            return IntentDecision(action="WEB_SEARCH",
-                                  query=IntentRouter._explicit_web_query(clean), confidence=0.99,
-                                  reason="expliziter Suchauftrag")
-        if re.search(r"\b(lokale[sn]? dokument|ingestiert|knowledge base|rag[- ](?:daten|wissen)|handbuch)\w*\b",
-                     lowered):
-            return IntentDecision(action="RAG", query=clean, confidence=0.98,
-                                  reason="explizite lokale Dokumentquelle")
+            return IntentDecision(
+                action="WEB_SEARCH",
+                query=IntentRouter._explicit_web_query(clean),
+                confidence=0.99,
+                reason="expliziter Suchauftrag",
+            )
+        if re.search(
+            r"\b(lokale[sn]? dokument|ingestiert|knowledge base|rag[- ](?:daten|wissen)|handbuch)\w*\b",
+            lowered,
+        ):
+            return IntentDecision(
+                action="RAG", query=clean, confidence=0.98, reason="explizite lokale Dokumentquelle"
+            )
         if re.search(
             r"^(?:erklär\w*|warum\b|wie funktioniert\b|was (?:ist|sind)\b|"
             r"was bedeutet\b|welchen unterschied\b|unterschied zwischen\b)",
             lowered,
         ):
             return IntentDecision(
-                action="NONE", confidence=0.98,
+                action="NONE",
+                confidence=0.98,
                 reason="allgemeine Wissensfrage ohne externe Daten",
             )
         return None
@@ -425,8 +435,9 @@ class IntentRouter:
             query,
             flags=re.IGNORECASE,
         )
-        query = re.sub(r"^(?:im|in dem)\s+(?:internet|web|netz)\s+(?:nach\s+)?",
-                       "", query, flags=re.IGNORECASE)
+        query = re.sub(
+            r"^(?:im|in dem)\s+(?:internet|web|netz)\s+(?:nach\s+)?", "", query, flags=re.IGNORECASE
+        )
         query = query.strip(" ?!.,:") or message.strip()
         lowered = query.casefold()
         if re.search(r"\bauto\w*\b", lowered) and re.search(r"\btun(?:en|ing)\w*\b", lowered):

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import re
 
-
 STERNTALER = """Die Sterntaler
 
 Es war einmal ein kleines Mädchen, das Vater und Mutter verloren hatte. Es war so arm, dass ihm außer den Kleidern, die es trug, nur noch ein Stück Brot geblieben war. Trotzdem ging es mutig hinaus in die Welt.

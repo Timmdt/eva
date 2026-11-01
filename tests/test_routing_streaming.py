@@ -51,9 +51,11 @@ class RoutingStreamingTest(unittest.TestCase):
         eva._get_current_time = Mock(return_value=None)
         eva._build_runtime_context = Mock(return_value="runtime")
         eva._build_relevant_memory_hint = Mock(return_value=None)
-        eva._build_message_history = Mock(return_value=[
-            {"role": "assistant", "content": "Schlechte alte Antwort mit Quellen"},
-        ])
+        eva._build_message_history = Mock(
+            return_value=[
+                {"role": "assistant", "content": "Schlechte alte Antwort mit Quellen"},
+            ]
+        )
 
         messages = eva._build_messages(
             "Kannst du mir eine Geschichte von den Brüdern Grimm erzählen?"
@@ -77,8 +79,7 @@ class RoutingStreamingTest(unittest.TestCase):
         eva = EVA.__new__(EVA)
         eva._run_web_action = Mock(return_value="LIVE RESULT")
         eva._memory_context_from_decision = Mock(return_value=None)
-        result = eva._execute_intent(
-            IntentDecision(action="WEB_SEARCH", query="aktuell"), "frage")
+        result = eva._execute_intent(IntentDecision(action="WEB_SEARCH", query="aktuell"), "frage")
         self.assertEqual(result, ("LIVE RESULT", None))
 
     def test_quick_wellbeing_reply_avoids_formal_help_phrase(self):
@@ -118,10 +119,7 @@ class RoutingStreamingTest(unittest.TestCase):
         eva._chat_stream.assert_not_called()
 
     def test_weather_failure_is_explicit_and_bypasses_language_model(self):
-        web_data = (
-            "WETTER_FEHLER\nOrt: Kissing\n"
-            "Fehler: Der Wetterdienst ist nicht erreichbar."
-        )
+        web_data = "WETTER_FEHLER\nOrt: Kissing\nFehler: Der Wetterdienst ist nicht erreichbar."
         eva = EVA.__new__(EVA)
         eva._chat_stream = Mock(side_effect=AssertionError("LLM darf nicht laufen"))
         output = "".join(eva.generate_response_stream("nochmal", web_data=web_data))
@@ -129,7 +127,6 @@ class RoutingStreamingTest(unittest.TestCase):
         self.assertIn("nicht erreichbar", output)
         self.assertNotIn("penguin", output.casefold())
         eva._chat_stream.assert_not_called()
-
 
     def test_general_web_prompt_is_spoken_friendly(self):
         eva = EVA(run_module_tests=False)
@@ -143,19 +140,26 @@ class RoutingStreamingTest(unittest.TestCase):
     def test_web_prompt_requires_direct_comparison(self):
         eva = EVA(run_module_tests=False)
         messages = eva._build_messages("Welches Auto?", web_data="WEB RESULTS")
-        web_prompt = next(item["content"] for item in messages
-                          if item["role"] == "system" and "LIVE-WEB-DATEN" in item["content"])
+        web_prompt = next(
+            item["content"]
+            for item in messages
+            if item["role"] == "system" and "LIVE-WEB-DATEN" in item["content"]
+        )
         self.assertIn("konkrete Kandidaten", web_prompt)
         self.assertIn("allgemeine Such- oder Kauftipps", web_prompt)
 
     def test_search_results_enrich_best_article(self):
         module = WebSearchModule()
-        module.fetch_url = Mock(return_value={"url": "https://example.test/article",
-                                              "text": "Konkrete Modelle " * 30})
+        module.fetch_url = Mock(
+            return_value={"url": "https://example.test/article", "text": "Konkrete Modelle " * 30}
+        )
         results = [
             {"title": "Gebrauchtwagenangebote", "url": "https://market.test/list", "snippet": "x"},
-            {"title": "Welches Auto eignet sich am besten?",
-             "url": "https://example.test/article", "snippet": "y"},
+            {
+                "title": "Welches Auto eignet sich am besten?",
+                "url": "https://example.test/article",
+                "snippet": "y",
+            },
         ]
         text = module._format_search_results("Tuning Autos", results)
         self.assertIn("SEITENEXZERPT", text)
@@ -176,7 +180,8 @@ class RoutingStreamingTest(unittest.TestCase):
     def test_relevant_excerpt_prioritizes_user_constraint(self):
         excerpt = (
             "Turbo-Modelle: VW Golf GTI, Audi S3. "
-            "Weitere allgemeine Erläuterungen. " * 12
+            "Weitere allgemeine Erläuterungen. "
+            * 12
             + "Günstige Basisfahrzeuge mit erschwinglichem Einstieg: BMW E36, VW Polo GTI."
         )
         relevant = WebSearchModule._relevant_excerpt(
@@ -188,10 +193,7 @@ class RoutingStreamingTest(unittest.TestCase):
         self.assertIn("BMW E36", relevant)
 
     def test_relevant_excerpt_excludes_previous_category(self):
-        excerpt = (
-            "Sportwagen: Honda Civic Type R. "
-            "Günstige Basisfahrzeuge: BMW E36, VW Polo GTI."
-        )
+        excerpt = "Sportwagen: Honda Civic Type R. Günstige Basisfahrzeuge: BMW E36, VW Polo GTI."
         relevant = WebSearchModule._relevant_excerpt(
             "relativ günstig tunen",
             excerpt,
@@ -223,7 +225,9 @@ class RoutingStreamingTest(unittest.TestCase):
             "Günstige Basisfahrzeuge eignen sich für Einsteiger. "
             "Beispiele: BMW E36, VW Polo GTI. Fazit: Auswahl nach Ziel."
         )
-        primary = "Günstige Basisfahrzeuge eignen sich für Einsteiger. Beispiele: BMW E36, VW Polo GTI."
+        primary = (
+            "Günstige Basisfahrzeuge eignen sich für Einsteiger. Beispiele: BMW E36, VW Polo GTI."
+        )
         evidence = WebSearchModule._example_evidence(excerpt, exclude_text=primary)
         self.assertIn("Turboautos", evidence)
         self.assertIn("Große Communities", evidence)
@@ -266,19 +270,23 @@ class RoutingStreamingTest(unittest.TestCase):
         self.assertEqual("".join(EVA._visible_stream(chunks)), "Antwort  sichtbar")
 
     def test_web_stream_appends_missing_exact_source(self):
-        output = "".join(EVA._web_stream_with_sources(
-            iter(["Kurzfazit", "\nDatenlage"]),
-            "Quelle: https://example.test/article",
-        ))
+        output = "".join(
+            EVA._web_stream_with_sources(
+                iter(["Kurzfazit", "\nDatenlage"]),
+                "Quelle: https://example.test/article",
+            )
+        )
         self.assertIn("Kurzfazit", output)
         self.assertIn("Quellen:\n- https://example.test/article", output)
 
     def test_web_stream_does_not_duplicate_exact_source(self):
         answer = "Quellen:\n- https://example.test/article"
-        output = "".join(EVA._web_stream_with_sources(
-            iter([answer]),
-            "Quelle: https://example.test/article",
-        ))
+        output = "".join(
+            EVA._web_stream_with_sources(
+                iter([answer]),
+                "Quelle: https://example.test/article",
+            )
+        )
         self.assertEqual(output, answer)
 
 
