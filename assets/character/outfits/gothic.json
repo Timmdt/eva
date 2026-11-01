@@ -1,0 +1,365 @@
+{
+  "version": 1,
+  "id": "eva-original-gothic",
+  "name": "EVA · Original Gothic",
+  "description": "Schwarz-bordeauxrotes Gothic-Outfit mit den zehn unveränderten Original-PNGs aus eva.zip. Alle Posen sind Standbilder.",
+  "poses": {
+    "idle": {
+      "frames": [
+        "../poses/idle.png"
+      ],
+      "scale": 1.0,
+      "anchor": [
+        0.5,
+        0.9912280701754386
+      ],
+      "frame_ms": 180,
+      "note": "Unverändertes Original-PNG aus eva.zip; statisches Einzelbild ohne Bewegungsframes.",
+      "label": "Sitzen · Beine verschränkt"
+    },
+    "listening": {
+      "frames": [
+        "../poses/listening.png"
+      ],
+      "scale": 1.0,
+      "anchor": [
+        0.5,
+        0.9936204146730463
+      ],
+      "frame_ms": 180,
+      "note": "Unverändertes Original-PNG aus eva.zip; statisches Einzelbild ohne Bewegungsframes."
+    },
+    "typing": {
+      "frames": [
+        "../poses/typing.png"
+      ],
+      "scale": 1.0,
+      "anchor": [
+        0.5,
+        0.9904306220095693
+      ],
+      "frame_ms": 180,
+      "note": "Unverändertes Original-PNG aus eva.zip; statisches Einzelbild ohne Bewegungsframes."
+    },
+    "reading": {
+      "frames": [
+        "../poses/reading.png"
+      ],
+      "scale": 1.0,
+      "anchor": [
+        0.5,
+        0.9848484848484849
+      ],
+      "frame_ms": 180,
+      "note": "Unverändertes Original-PNG aus eva.zip; statisches Einzelbild ohne Bewegungsframes."
+    },
+    "tired": {
+      "frames": [
+        "../poses/tired.png"
+      ],
+      "scale": 1.0,
+      "anchor": [
+        0.5,
+        0.9960127591706539
+      ],
+      "frame_ms": 180,
+      "note": "Unverändertes Original-PNG aus eva.zip; statisches Einzelbild ohne Bewegungsframes."
+    },
+    "falling_asleep": {
+      "frames": [
+        "../poses/sleeping.png"
+      ],
+      "scale": 0.72,
+      "anchor": [
+        0.5,
+        0.9134438305709024
+      ],
+      "frame_ms": 180,
+      "note": "Schlafpose als statischer Ersatz; keine Übergangsframes zum Einschlafen."
+    },
+    "sleeping": {
+      "frames": [
+        "../poses/sleeping.png"
+      ],
+      "scale": 0.72,
+      "anchor": [
+        0.5,
+        0.9134438305709024
+      ],
+      "frame_ms": 180,
+      "note": "Unverändertes Original-PNG aus eva.zip; statisches Einzelbild ohne Bewegungsframes."
+    },
+    "rising": {
+      "frames": [
+        "../poses/standing.png"
+      ],
+      "scale": 1.7,
+      "anchor": [
+        0.5,
+        0.990234375
+      ],
+      "frame_ms": 180,
+      "note": "Standpose als statischer Ersatz; keine Aufstehbewegung.",
+      "label": "Aufstehen · Standpose"
+    },
+    "stretching": {
+      "frames": [
+        "../poses/stretching.png"
+      ],
+      "scale": 1.0,
+      "anchor": [
+        0.5,
+        0.9976076555023924
+      ],
+      "frame_ms": 180,
+      "note": "Unverändertes Original-PNG aus eva.zip; statisches Einzelbild ohne Bewegungsframes."
+    },
+    "happy": {
+      "frames": [
+        "../poses/happy.png"
+      ],
+      "scale": 1.0,
+      "anchor": [
+        0.5,
+        0.9944178628389154
+      ],
+      "frame_ms": 180,
+      "note": "Unverändertes Original-PNG aus eva.zip; statisches Einzelbild ohne Bewegungsframes."
+    },
+    "thinking": {
+      "frames": [
+        "../poses/listening.png"
+      ],
+      "scale": 1.0,
+      "anchor": [
+        0.5,
+        0.9936204146730463
+      ],
+      "frame_ms": 180,
+      "note": "Nachdenkliche Knie-hoch-Pose als statischer Ersatz; keine Bewegungsframes."
+    },
+    "sitting_down": {
+      "frames": [
+        "../poses/idle.png"
+      ],
+      "scale": 1.0,
+      "anchor": [
+        0.5,
+        0.9912280701754386
+      ],
+      "frame_ms": 180,
+      "note": "Sitzpose als statischer Ersatz; keine Hinsetzbewegung.",
+      "label": "Hinsetzen · Sitzpose"
+    },
+    "alert": {
+      "frames": [
+        "../poses/idle.png"
+      ],
+      "scale": 1.0,
+      "anchor": [
+        0.5,
+        0.9912280701754386
+      ],
+      "frame_ms": 180,
+      "note": "Aufmerksame Sitzpose als statischer Ersatz; keine Bewegungsframes."
+    },
+    "waving": {
+      "frames": [
+        "../poses/waving.png"
+      ],
+      "scale": 1.0,
+      "anchor": [
+        0.5,
+        0.992822966507177
+      ],
+      "frame_ms": 180,
+      "note": "Unverändertes Original-PNG aus eva.zip; statisches Einzelbild ohne Bewegungsframes."
+    },
+    "standing": {
+      "frames": [
+        "../poses/standing.png"
+      ],
+      "scale": 1.7,
+      "anchor": [
+        0.5,
+        0.990234375
+      ],
+      "frame_ms": 180,
+      "note": "Unverändertes Original-PNG aus eva.zip; statisches Einzelbild ohne Bewegungsframes."
+    },
+    "talking": {
+      "frames": [
+        "../poses/listening.png"
+      ],
+      "scale": 1.0,
+      "anchor": [
+        0.5,
+        0.9936204146730463
+      ],
+      "frame_ms": 180,
+      "note": "Zuhör-Pose als statischer Ersatz; keine Mundbewegungsframes."
+    },
+    "annoyed": {
+      "frames": [
+        "../poses/idle.png"
+      ],
+      "scale": 1.0,
+      "anchor": [
+        0.5,
+        0.9912280701754386
+      ],
+      "frame_ms": 180,
+      "note": "Idle-Pose als statischer Ersatz; genervter Ausdruck separat im Porträt verfügbar.",
+      "label": "Sitzen · Beine verschränkt"
+    }
+  },
+  "expressions": {
+    "Neutral": "../expressions/expression-00.png",
+    "Aufmerksam": "../expressions/expression-01.png",
+    "Freundlich": "../expressions/expression-02.png",
+    "Neugierig": "../expressions/expression-03.png",
+    "Überrascht": "../expressions/expression-04.png",
+    "Nachdenklich": "../expressions/expression-05.png",
+    "Amüsiert": "../expressions/expression-06.png",
+    "Genervt": "../expressions/expression-07.png"
+  },
+  "provenance": "Körperposen: unveränderte Original-PNGs aus der vom Nutzer bereitgestellten eva.zip, einschließlich Alphakanal. Ausdrucksporträts: bisherige Freistellungen aus dem Character Sheet.",
+  "pose_sources": {
+    "idle": {
+      "archive_member": "image-gen-2(20261031-225352).png",
+      "sha256": "88daa8f40464c767ab5d6f5fe66ae241671f05912706ab167d4fc132e5ae09bd",
+      "dimensions": [
+        1254,
+        1254
+      ]
+    },
+    "listening": {
+      "archive_member": "image-gen-3(20261031-225354).png",
+      "sha256": "c6ce662667465b991f43807aa3038da222886e90e4051786b7bce2107c88a832",
+      "dimensions": [
+        1254,
+        1254
+      ]
+    },
+    "typing": {
+      "archive_member": "image-gen-6(6).png",
+      "sha256": "2b496fd89019a14f68a9d02b3af78c7460b9052b71417ec535dfe8bde0e01bc1",
+      "dimensions": [
+        1254,
+        1254
+      ]
+    },
+    "reading": {
+      "archive_member": "image-gen-5(9).png",
+      "sha256": "c185cf4b39beac4e7b64884776352a6300d3180aa12adcdea9d65fb4e4e5e582",
+      "dimensions": [
+        1254,
+        1254
+      ]
+    },
+    "tired": {
+      "archive_member": "image-gen-7(5).png",
+      "sha256": "9b19cfc0d9b1543c94d13c720061f75f1e0988dd9005e461307789c7aa2304aa",
+      "dimensions": [
+        1254,
+        1254
+      ]
+    },
+    "falling_asleep": {
+      "archive_member": "image-gen-8(5).png",
+      "sha256": "f0087d6044e70f6d1d3267fa691617018cddb9bf68d1241f489b466514b96a28",
+      "dimensions": [
+        1448,
+        1086
+      ]
+    },
+    "sleeping": {
+      "archive_member": "image-gen-8(5).png",
+      "sha256": "f0087d6044e70f6d1d3267fa691617018cddb9bf68d1241f489b466514b96a28",
+      "dimensions": [
+        1448,
+        1086
+      ]
+    },
+    "rising": {
+      "archive_member": "image-gen-1(20261031-225350).png",
+      "sha256": "9879acc96b43cdc6d8a7f2a434312a1bc58dade4253e7f2076adb451d1b33ac0",
+      "dimensions": [
+        1024,
+        1536
+      ]
+    },
+    "stretching": {
+      "archive_member": "image-gen-9(3).png",
+      "sha256": "6453521b489ce0f5cb77981140c75faba95a46bd14d31d67e78b4135ecf4f37f",
+      "dimensions": [
+        1254,
+        1254
+      ]
+    },
+    "happy": {
+      "archive_member": "image-gen-4(20261031-225356).png",
+      "sha256": "7ff3e3f8cf33a5fc587a99983135c45a5b49d67a0c9c8608c3862139acf4be8b",
+      "dimensions": [
+        1254,
+        1254
+      ]
+    },
+    "thinking": {
+      "archive_member": "image-gen-3(20261031-225354).png",
+      "sha256": "c6ce662667465b991f43807aa3038da222886e90e4051786b7bce2107c88a832",
+      "dimensions": [
+        1254,
+        1254
+      ]
+    },
+    "sitting_down": {
+      "archive_member": "image-gen-2(20261031-225352).png",
+      "sha256": "88daa8f40464c767ab5d6f5fe66ae241671f05912706ab167d4fc132e5ae09bd",
+      "dimensions": [
+        1254,
+        1254
+      ]
+    },
+    "alert": {
+      "archive_member": "image-gen-2(20261031-225352).png",
+      "sha256": "88daa8f40464c767ab5d6f5fe66ae241671f05912706ab167d4fc132e5ae09bd",
+      "dimensions": [
+        1254,
+        1254
+      ]
+    },
+    "waving": {
+      "archive_member": "image-gen-10(3).png",
+      "sha256": "43f12e1dc3e73a7e4594c235893bcecd9d3004a04bde59a698e6e062b5580989",
+      "dimensions": [
+        1254,
+        1254
+      ]
+    },
+    "standing": {
+      "archive_member": "image-gen-1(20261031-225350).png",
+      "sha256": "9879acc96b43cdc6d8a7f2a434312a1bc58dade4253e7f2076adb451d1b33ac0",
+      "dimensions": [
+        1024,
+        1536
+      ]
+    },
+    "talking": {
+      "archive_member": "image-gen-3(20261031-225354).png",
+      "sha256": "c6ce662667465b991f43807aa3038da222886e90e4051786b7bce2107c88a832",
+      "dimensions": [
+        1254,
+        1254
+      ]
+    },
+    "annoyed": {
+      "archive_member": "image-gen-2(20261031-225352).png",
+      "sha256": "88daa8f40464c767ab5d6f5fe66ae241671f05912706ab167d4fc132e5ae09bd",
+      "dimensions": [
+        1254,
+        1254
+      ]
+    }
+  }
+}

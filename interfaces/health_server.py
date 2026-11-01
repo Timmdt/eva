@@ -1,23 +1,24 @@
 from __future__ import annotations
 
+import hmac
 import json
 import os
-import hmac
 import threading
 import time
 import urllib.request
+from collections.abc import Callable
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from core.activity import INGESTION_LOCK, KEEP_AWAKE_FILE, activity_registry
+from core.safe_shutdown import SafeShutdown
 from interfaces.presence_automation import (
     PresenceAutomation,
     PresenceAutomationConfig,
 )
 from interfaces.presence_state import presence_fusion
 from interfaces.web_chat import WebChat
-from core.safe_shutdown import SafeShutdown
 
 
 def health_payload(
@@ -42,23 +43,33 @@ def health_payload(
             voice_status = status_provider()
         except Exception:
             voice_status = {
-                "enabled": True, "ready": False, "error": "status unavailable",
+                "enabled": True,
+                "ready": False,
+                "error": "status unavailable",
             }
-    ready = ollama_ok and postgres_ok and rag_ok and (
-        not voice_status.get("enabled") or voice_status.get("ready")
+    ready = (
+        ollama_ok
+        and postgres_ok
+        and rag_ok
+        and (not voice_status.get("enabled") or voice_status.get("ready"))
     )
     fused = presence_fusion.current()
     expected_identity = fused.identity if fused.personal_context_allowed else None
     if getattr(eva, "current_identity", None) != expected_identity:
         eva.set_identity(expected_identity)
-    payload = {"status": "ready" if ready else "degraded", "ollama": ollama_ok,
-            "postgres": postgres_ok, "rag": rag_ok, "eva": True,
-            "active_request": activity_registry.active("request"),
-            "ingestion": activity_registry.active("ingestion") or INGESTION_LOCK.exists(),
-            "critical_task": activity_registry.active("critical"),
-            "keep_awake": KEEP_AWAKE_FILE.exists(),
-            "presence": fused.to_dict(),
-            "voice": voice_status}
+    payload = {
+        "status": "ready" if ready else "degraded",
+        "ollama": ollama_ok,
+        "postgres": postgres_ok,
+        "rag": rag_ok,
+        "eva": True,
+        "active_request": activity_registry.active("request"),
+        "ingestion": activity_registry.active("ingestion") or INGESTION_LOCK.exists(),
+        "critical_task": activity_registry.active("critical"),
+        "keep_awake": KEEP_AWAKE_FILE.exists(),
+        "presence": fused.to_dict(),
+        "voice": voice_status,
+    }
     if automation is not None:
         payload["presence_automation"] = automation.status()
     return payload
@@ -70,7 +81,10 @@ def handler_factory(
     automation: PresenceAutomation | None = None,
 ) -> type[BaseHTTPRequestHandler]:
     web_enabled = os.getenv("EVA_WEB_ENABLED", "false").lower() in {
-        "1", "true", "yes", "on",
+        "1",
+        "true",
+        "yes",
+        "on",
     }
     web = (
         WebChat(eva, Path(__file__).resolve().parents[1])
@@ -147,9 +161,7 @@ def handler_factory(
                     asset.read_bytes(),
                     content_type,
                     cache_control=(
-                        "no-store"
-                        if filename == "index.html"
-                        else "public, max-age=3600"
+                        "no-store" if filename == "index.html" else "public, max-age=3600"
                     ),
                 )
                 return
@@ -208,9 +220,7 @@ def handler_factory(
                     return
 
                 self.send_response(200)
-                self.send_header(
-                    "Content-Type", "application/x-ndjson; charset=utf-8"
-                )
+                self.send_header("Content-Type", "application/x-ndjson; charset=utf-8")
                 self.send_header("Cache-Control", "no-store")
                 self.send_header("X-Content-Type-Options", "nosniff")
                 self.send_header("Connection", "close")
@@ -220,9 +230,7 @@ def handler_factory(
                 for event in web.events(message):
                     if not connected:
                         continue
-                    line = (
-                        json.dumps(event, ensure_ascii=False).encode("utf-8") + b"\n"
-                    )
+                    line = json.dumps(event, ensure_ascii=False).encode("utf-8") + b"\n"
                     try:
                         self.wfile.write(line)
                         self.wfile.flush()
@@ -253,10 +261,10 @@ def handler_factory(
                     feature_enabled=True,
                     allow_shutdown=os.getenv("EVA_ALLOW_REMOTE_SHUTDOWN", "false").lower()
                     in {"1", "true", "yes", "on"},
-                    keep_awake_file=Path(os.getenv(
-                        "EVA_KEEP_AWAKE_FILE", str(KEEP_AWAKE_FILE))),
-                    inhibit_file=Path(os.getenv(
-                        "EVA_SHUTDOWN_INHIBIT_FILE", "/tmp/eva_shutdown_inhibit")),
+                    keep_awake_file=Path(os.getenv("EVA_KEEP_AWAKE_FILE", str(KEEP_AWAKE_FILE))),
+                    inhibit_file=Path(
+                        os.getenv("EVA_SHUTDOWN_INHIBIT_FILE", "/tmp/eva_shutdown_inhibit")
+                    ),
                     boot_grace=float(os.getenv("EVA_REMOTE_SHUTDOWN_BOOT_GRACE", "600")),
                 )
                 fused = presence_fusion.current()
@@ -271,15 +279,18 @@ def handler_factory(
                 if decision.dry_run:
                     shutdown.request()
                 else:
+
                     def delayed_shutdown() -> None:
                         time.sleep(0.25)
                         shutdown.request()
+
                     threading.Thread(target=delayed_shutdown, daemon=True).start()
                 return
             self.send_error(404)
 
         def log_message(self, _format: str, *args: Any) -> None:
             return
+
     return HealthHandler
 
 
@@ -297,6 +308,7 @@ def _weather_provider(eva: Any) -> Callable[[str], str | None]:
             f"In {data['location']} sind es {data['temperature']} Grad, "
             f"gefühlt {data['feels_like']} Grad. {data['description']}."
         )
+
     return provide
 
 
@@ -315,7 +327,6 @@ def serve(eva: Any, host: str = "127.0.0.1", port: int = 8765) -> None:
 
 
 def start_in_thread(eva: Any, host: str = "127.0.0.1", port: int = 8765) -> threading.Thread:
-    thread = threading.Thread(target=serve, args=(eva, host, port),
-                              name="eva-health", daemon=True)
+    thread = threading.Thread(target=serve, args=(eva, host, port), name="eva-health", daemon=True)
     thread.start()
     return thread

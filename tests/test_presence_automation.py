@@ -1,6 +1,6 @@
 import tempfile
 import unittest
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from interfaces.presence_automation import (
@@ -35,7 +35,7 @@ class PresenceAutomationTest(unittest.TestCase):
 
     def test_initial_recognition_greets_once(self):
         with tempfile.TemporaryDirectory() as directory:
-            now = [datetime(2026, 8, 28, 14, 0, tzinfo=timezone.utc)]
+            now = [datetime(2026, 8, 28, 14, 0, tzinfo=UTC)]
             automation, announcements = self._automation(directory, now)
 
             self.assertEqual(
@@ -47,7 +47,7 @@ class PresenceAutomationTest(unittest.TestCase):
 
     def test_short_absence_stays_silent(self):
         with tempfile.TemporaryDirectory() as directory:
-            now = [datetime(2026, 8, 28, 14, 0, tzinfo=timezone.utc)]
+            now = [datetime(2026, 8, 28, 14, 0, tzinfo=UTC)]
             automation, announcements = self._automation(directory, now)
             automation.handle_report(self._room(True, "Tim"))
 
@@ -61,7 +61,7 @@ class PresenceAutomationTest(unittest.TestCase):
 
     def test_long_absence_reports_duration_and_events(self):
         with tempfile.TemporaryDirectory() as directory:
-            now = [datetime(2026, 8, 28, 14, 0, tzinfo=timezone.utc)]
+            now = [datetime(2026, 8, 28, 14, 0, tzinfo=UTC)]
             automation, announcements = self._automation(directory, now)
             automation.handle_report(self._room(True, "Tim"))
             now[0] += timedelta(minutes=1)
@@ -79,7 +79,7 @@ class PresenceAutomationTest(unittest.TestCase):
 
     def test_morning_greeting_includes_weather_only_once_per_day(self):
         with tempfile.TemporaryDirectory() as directory:
-            now = [datetime(2026, 8, 29, 6, 0, tzinfo=timezone.utc)]
+            now = [datetime(2026, 8, 29, 6, 0, tzinfo=UTC)]
             automation, announcements = self._automation(directory, now)
 
             result = automation.handle_report(self._room(True, "Tim"))
@@ -94,7 +94,7 @@ class PresenceAutomationTest(unittest.TestCase):
 
     def test_unknown_person_never_receives_announcement(self):
         with tempfile.TemporaryDirectory() as directory:
-            now = [datetime(2026, 8, 29, 6, 0, tzinfo=timezone.utc)]
+            now = [datetime(2026, 8, 29, 6, 0, tzinfo=UTC)]
             automation, announcements = self._automation(directory, now)
 
             self.assertIsNone(automation.handle_report(self._room(True)))
@@ -102,9 +102,8 @@ class PresenceAutomationTest(unittest.TestCase):
 
     def test_disabled_automation_does_nothing(self):
         with tempfile.TemporaryDirectory() as directory:
-            now = [datetime(2026, 8, 29, 6, 0, tzinfo=timezone.utc)]
-            automation, announcements = self._automation(
-                directory, now, enabled=False)
+            now = [datetime(2026, 8, 29, 6, 0, tzinfo=UTC)]
+            automation, announcements = self._automation(directory, now, enabled=False)
 
             self.assertIsNone(automation.handle_report(self._room(True, "Tim")))
             self.assertEqual(announcements, [])

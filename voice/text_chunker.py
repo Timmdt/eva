@@ -7,7 +7,6 @@ from pathlib import Path
 
 from .config import VoiceConfig
 
-
 WORD_RE = re.compile(r"[\wÄÖÜäöüß]+(?:[.][\wÄÖÜäöüß]+)*", re.UNICODE)
 URL_RE = re.compile(r"https?://\S+", re.IGNORECASE)
 FENCE_RE = re.compile(r"```.*?```", re.DOTALL)
@@ -137,8 +136,14 @@ class SpeechChunker:
         self.buffer += fragment
         chunks: list[str] = []
         while True:
-            minimum = self.config.first_chunk_min_words if self.first else self.config.chunk_min_words
-            target = self.config.first_chunk_target_words if self.first else self.config.chunk_target_words
+            minimum = (
+                self.config.first_chunk_min_words if self.first else self.config.chunk_min_words
+            )
+            target = (
+                self.config.first_chunk_target_words
+                if self.first
+                else self.config.chunk_target_words
+            )
             words = _word_count(self.buffer)
             sentence_boundaries = _safe_sentence_boundaries(self.buffer)
             if self.config.sentence_chunks_only:
@@ -150,14 +155,21 @@ class SpeechChunker:
                 continue
             if words < minimum:
                 break
-            sentence = [end for end in sentence_boundaries if _word_count(self.buffer[:end]) >= minimum]
+            sentence = [
+                end for end in sentence_boundaries if _word_count(self.buffer[:end]) >= minimum
+            ]
             if sentence:
                 chunk = self._emit(sentence[0])
             else:
-                soft = [end for end in _soft_boundaries(self.buffer) if _word_count(self.buffer[:end]) >= target]
+                soft = [
+                    end
+                    for end in _soft_boundaries(self.buffer)
+                    if _word_count(self.buffer[:end]) >= target
+                ]
                 waited = (
                     self.buffer_started_at is not None
-                    and (self.clock() - self.buffer_started_at) * 1000.0 >= self.config.max_chunk_wait_ms
+                    and (self.clock() - self.buffer_started_at) * 1000.0
+                    >= self.config.max_chunk_wait_ms
                 )
                 if soft:
                     chunk = self._emit(soft[0])
@@ -165,7 +177,9 @@ class SpeechChunker:
                     end = _word_boundary(self.buffer, target, self.config.chunk_max_words)
                     chunk = self._emit(end) if end else None
                 elif waited and words >= minimum:
-                    end = _word_boundary(self.buffer, min(target, words), self.config.chunk_max_words)
+                    end = _word_boundary(
+                        self.buffer, min(target, words), self.config.chunk_max_words
+                    )
                     chunk = self._emit(end) if end else None
                 else:
                     break

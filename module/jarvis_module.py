@@ -29,7 +29,7 @@ class JarvisModule(ModuleBase):
             return {
                 "text": (
                     f"Aktueller Status: Bond-Level {bond:.2f}, Stimmung {emotion}. "
-                    "Ich überwache deine Module und bin bereit." 
+                    "Ich überwache deine Module und bin bereit."
                 )
             }
 
@@ -43,7 +43,7 @@ class JarvisModule(ModuleBase):
             return {
                 "text": (
                     "Ich bin EVA. Du kannst mich nach der Zeit fragen, deinen Status abfragen oder "
-                    "mir ein neues Modul geben. Sag einfach, was du brauchst." 
+                    "mir ein neues Modul geben. Sag einfach, was du brauchst."
                 )
             }
 
@@ -54,7 +54,13 @@ class JarvisModule(ModuleBase):
         if not self.can_handle(sample):
             return False, "JarvisModule erkennt Zeit-Anfragen nicht."
 
-        result = self.handle(sample, {"state": {"bond_level": 0.5, "current_emotion": "ruhig"}, "module_names": ["JarvisCore"]})
+        result = self.handle(
+            sample,
+            {
+                "state": {"bond_level": 0.5, "current_emotion": "ruhig"},
+                "module_names": ["JarvisCore"],
+            },
+        )
         text = result.get("text", "") if result else ""
         if "Es ist jetzt" not in text:
             return False, f"JarvisModule hat unerwartete Antwort: {text}"

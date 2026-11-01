@@ -3,10 +3,11 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any
 
 from core.activity import INGESTION_LOCK, activity_registry
 from core.config import EVA_CONFIG
@@ -34,10 +35,12 @@ def split_text(text: str, chunk_size: int = 1200, overlap: int = 120) -> list[st
         hard_end = min(len(text), start + chunk_size)
         end = hard_end
         if hard_end < len(text):
-            candidates = [text.rfind(marker, start, hard_end) for marker in ("\n\n", "\n", ". ", " ")]
+            candidates = [
+                text.rfind(marker, start, hard_end) for marker in ("\n\n", "\n", ". ", " ")
+            ]
             boundary = max(candidates)
             if boundary > start + chunk_size // 2:
-                end = boundary + (2 if text[boundary:boundary + 2] == "\n\n" else 1)
+                end = boundary + (2 if text[boundary : boundary + 2] == "\n\n" else 1)
         chunk = text[start:end].strip()
         if chunk:
             chunks.append(chunk)
@@ -59,7 +62,9 @@ def read_document(path: Path) -> str:
         try:
             from pypdf import PdfReader
         except ImportError as exc:
-            raise RuntimeError("PDF benötigt optional 'pypdf'; Text/Markdown/JSON funktionieren ohne.") from exc
+            raise RuntimeError(
+                "PDF benötigt optional 'pypdf'; Text/Markdown/JSON funktionieren ohne."
+            ) from exc
         return "\n\n".join(page.extract_text() or "" for page in PdfReader(str(path)).pages)
     raise ValueError(f"Nicht unterstütztes Dateiformat: {path.suffix}")
 
@@ -75,16 +80,24 @@ def iter_files(target: Path, recursive: bool = False) -> Iterator[Path]:
             yield path
 
 
-def build_chunks(path: Path, document_id: str, chunk_size: int, overlap: int,
-                 source: str | None = None) -> list[dict[str, Any]]:
+def build_chunks(
+    path: Path, document_id: str, chunk_size: int, overlap: int, source: str | None = None
+) -> list[dict[str, Any]]:
     parts = split_text(read_document(path), chunk_size, overlap)
-    return [{
-        "document_id": document_id,
-        "chunk_id": f"{document_id}::chunk_{index:04d}",
-        "content": part,
-        "metadata": {"source": source or str(path), "file_name": path.name,
-                     "chunk_index": index, "chunk_count": len(parts)},
-    } for index, part in enumerate(parts)]
+    return [
+        {
+            "document_id": document_id,
+            "chunk_id": f"{document_id}::chunk_{index:04d}",
+            "content": part,
+            "metadata": {
+                "source": source or str(path),
+                "file_name": path.name,
+                "chunk_index": index,
+                "chunk_count": len(parts),
+            },
+        }
+        for index, part in enumerate(parts)
+    ]
 
 
 def create_retriever() -> RAGRetriever:
@@ -113,9 +126,16 @@ def ingestion_activity() -> Iterator[None]:
         INGESTION_LOCK.unlink(missing_ok=True)
 
 
-def ingest(target: Path, *, recursive: bool = False, chunk_size: int = 1200,
-           overlap: int = 120, source: str | None = None, dry_run: bool = False,
-           retriever: Any | None = None) -> dict[str, int]:
+def ingest(
+    target: Path,
+    *,
+    recursive: bool = False,
+    chunk_size: int = 1200,
+    overlap: int = 120,
+    source: str | None = None,
+    dry_run: bool = False,
+    retriever: Any | None = None,
+) -> dict[str, int]:
     files = list(iter_files(target, recursive))
     chunks: list[dict[str, Any]] = []
     for counter, path in enumerate(files, start=1):
@@ -140,8 +160,14 @@ def main() -> None:
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
-    result = ingest(args.target, recursive=args.recursive, chunk_size=args.chunk_size,
-                    overlap=args.overlap, source=args.source, dry_run=args.dry_run)
+    result = ingest(
+        args.target,
+        recursive=args.recursive,
+        chunk_size=args.chunk_size,
+        overlap=args.overlap,
+        source=args.source,
+        dry_run=args.dry_run,
+    )
     print(json.dumps(result, ensure_ascii=False))
 
 

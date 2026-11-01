@@ -38,16 +38,17 @@ class TextChunkerTest(unittest.TestCase):
     def test_decimal_and_url_are_not_treated_as_sentence_end(self):
         chunker = SpeechChunker(self.config(first_chunk_min_words=2))
         self.assertEqual(chunker.feed("Qwen2.5 läuft unter https://example.test/api "), [])
-        self.assertEqual(chunker.feed("weiter und antwortet danach normal."), [
-            "Kwen zwei Punkt fünf läuft unter Link weiter und antwortet danach normal."
-        ])
+        self.assertEqual(
+            chunker.feed("weiter und antwortet danach normal."),
+            ["Kwen zwei Punkt fünf läuft unter Link weiter und antwortet danach normal."],
+        )
 
     def test_wait_limit_emits_a_safe_phrase(self):
         now = [0.0]
-        chunker = SpeechChunker(
-            self.config(sentence_chunks_only=False), clock=lambda: now[0]
+        chunker = SpeechChunker(self.config(sentence_chunks_only=False), clock=lambda: now[0])
+        self.assertEqual(
+            chunker.feed("Das ist eine ausreichend lange natürliche Einleitung ohne Ende"), []
         )
-        self.assertEqual(chunker.feed("Das ist eine ausreichend lange natürliche Einleitung ohne Ende"), [])
         now[0] = 0.4
         chunks = chunker.feed(" mit weiteren Worten")
         self.assertEqual(len(chunks), 1)
@@ -55,9 +56,7 @@ class TextChunkerTest(unittest.TestCase):
 
     def test_sentence_mode_does_not_split_at_comma_or_wait_limit(self):
         now = [0.0]
-        chunker = SpeechChunker(
-            self.config(sentence_chunks_only=True), clock=lambda: now[0]
-        )
+        chunker = SpeechChunker(self.config(sentence_chunks_only=True), clock=lambda: now[0])
         self.assertEqual(
             chunker.feed("Natürlich, der BMW E sechsundvierzig ist sehr bekannt,"),
             [],
@@ -129,7 +128,6 @@ class AudioQueueTest(unittest.TestCase):
         self.assertEqual(received, [b"\x01\x00" * 20])
 
 
-
 class VoiceServiceTest(unittest.TestCase):
     def test_disabled_service_does_not_spawn_worker(self):
         service = VoiceService(VoiceConfig(enabled=False))
@@ -171,16 +169,20 @@ class VoiceServiceTest(unittest.TestCase):
             self.assertTrue(VoiceConfig.from_env().low_vram_mode)
 
 
-
 class SpeakerCacheTest(unittest.TestCase):
     def test_cache_fingerprint_changes_with_reference(self):
         with tempfile.TemporaryDirectory() as directory:
             reference = Path(directory, "eva.wav")
             reference.write_bytes(b"first")
             engine = XTTSEngine(
-                model_name="xtts", references=[reference], language="de", device="cpu",
-                cache_dir=Path(directory, "cache"), cache_speaker=True,
-                low_vram_mode=True, stream_chunk_size=20,
+                model_name="xtts",
+                references=[reference],
+                language="de",
+                device="cpu",
+                cache_dir=Path(directory, "cache"),
+                cache_speaker=True,
+                low_vram_mode=True,
+                stream_chunk_size=20,
             )
             first = engine._fingerprint()
             reference.write_bytes(b"second version")
@@ -190,9 +192,14 @@ class SpeakerCacheTest(unittest.TestCase):
         fake_torch = Mock()
         fake_torch.cuda.is_available.return_value = False
         engine = XTTSEngine(
-            model_name="xtts", references=[], language="de", device="cuda",
-            cache_dir=Path("cache"), cache_speaker=False,
-            low_vram_mode=True, stream_chunk_size=20,
+            model_name="xtts",
+            references=[],
+            language="de",
+            device="cuda",
+            cache_dir=Path("cache"),
+            cache_speaker=False,
+            low_vram_mode=True,
+            stream_chunk_size=20,
         )
         with self.assertRaisesRegex(RuntimeError, "CUDA ist nicht verfügbar"):
             engine._device(fake_torch)

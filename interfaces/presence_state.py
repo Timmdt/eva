@@ -1,10 +1,10 @@
 from __future__ import annotations
 
+import os
 import threading
 import time
-import os
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 
@@ -37,8 +37,8 @@ class PresenceFusion:
         self._reports: dict[str, dict[str, Any]] = {}
         self._lock = threading.RLock()
         self.ttl_seconds = float(
-            os.getenv("EVA_PRESENCE_REPORT_TTL", "30")
-            if ttl_seconds is None else ttl_seconds)
+            os.getenv("EVA_PRESENCE_REPORT_TTL", "30") if ttl_seconds is None else ttl_seconds
+        )
         self.clock = clock
 
     def update(self, report: dict[str, Any]) -> FusedPresence:
@@ -50,7 +50,7 @@ class PresenceFusion:
             "identity": str(report.get("identity") or "").strip() or None,
             "confidence": max(0.0, min(1.0, float(report.get("confidence", 0.0)))),
             "received_at": self.clock(),
-            "received_iso": datetime.now(timezone.utc).isoformat(),
+            "received_iso": datetime.now(UTC).isoformat(),
         }
         with self._lock:
             self._reports[sensor] = clean
@@ -69,7 +69,8 @@ class PresenceFusion:
             room_identity = room.get("identity") if room.get("presence") else None
             identity = desk_identity or room_identity
             confidence = float(
-                desk.get("confidence", 0.0) if desk_identity else room.get("confidence", 0.0))
+                desk.get("confidence", 0.0) if desk_identity else room.get("confidence", 0.0)
+            )
             return FusedPresence(
                 room_presence=bool(room.get("presence")),
                 desk_presence=bool(desk.get("presence")),

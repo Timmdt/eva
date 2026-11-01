@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 import hashlib
-import json
 import os
 import threading
 import time
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Iterator
 
 
 class XTTSEngine:
@@ -190,12 +189,17 @@ class XTTSEngine:
         frames = samples[: frame_count * frame_size].reshape(frame_count, frame_size)
         rms = torch.sqrt(torch.mean(frames * frames, dim=1) + 1e-12)
         mask = (rms > 0.006).float().reshape(1, 1, -1)
-        active = torch.nn.functional.max_pool1d(
-            mask,
-            kernel_size=7,
-            stride=1,
-            padding=3,
-        ).bool().flatten().tolist()
+        active = (
+            torch.nn.functional.max_pool1d(
+                mask,
+                kernel_size=7,
+                stride=1,
+                padding=3,
+            )
+            .bool()
+            .flatten()
+            .tolist()
+        )
         runs: list[tuple[int, int]] = []
         start = None
         for index, value in enumerate(active + [False]):
@@ -210,11 +214,7 @@ class XTTSEngine:
         gap_seconds = (trailing[0] - previous[1]) * frame_size / self.sample_rate
         trailing_seconds = (trailing[1] - trailing[0]) * frame_size / self.sample_rate
         suffix_seconds = (samples.numel() - trailing[0] * frame_size) / self.sample_rate
-        if (
-            gap_seconds < 0.20
-            or trailing_seconds > 0.28
-            or suffix_seconds > 0.55
-        ):
+        if gap_seconds < 0.20 or trailing_seconds > 0.28 or suffix_seconds > 0.55:
             return audio
         clean_end = min(samples.numel(), previous[1] * frame_size)
         clean_tail = torch.zeros(

@@ -14,7 +14,6 @@ from typing import Any
 
 import psutil
 
-
 DEFAULT_PROMPTS: tuple[tuple[str, list[dict[str, str]]], ...] = (
     (
         "himmel",
@@ -22,44 +21,62 @@ DEFAULT_PROMPTS: tuple[tuple[str, list[dict[str, str]]], ...] = (
     ),
     (
         "training",
-        [{"role": "user", "content": (
-            "Ich habe morgen um 13:50 Training. Was könnte ich vorher essen?"
-        )}],
+        [
+            {
+                "role": "user",
+                "content": ("Ich habe morgen um 13:50 Training. Was könnte ich vorher essen?"),
+            }
+        ],
     ),
     (
         "smalltalk",
-        [{"role": "user", "content": (
-            "Schreibe eine kurze natürliche Antwort auf: Hey, was machst du gerade?"
-        )}],
+        [
+            {
+                "role": "user",
+                "content": (
+                    "Schreibe eine kurze natürliche Antwort auf: Hey, was machst du gerade?"
+                ),
+            }
+        ],
     ),
     (
         "ram_vram",
-        [{"role": "user", "content": (
-            "Erkläre mir den Unterschied zwischen RAM und VRAM."
-        )}],
+        [{"role": "user", "content": ("Erkläre mir den Unterschied zwischen RAM und VRAM.")}],
     ),
     (
         "dialog",
         [
-            {"role": "user", "content": (
-                "Ich möchte einen leisen lokalen Sprachassistenten bauen. "
-                "Antwortzeit ist wichtiger als sehr lange Antworten."
-            )},
-            {"role": "assistant", "content": (
-                "Dann sollten Modell und Sprachausgabe dauerhaft geladen bleiben."
-            )},
-            {"role": "user", "content": (
-                "Welche zwei Prioritäten würdest du daraus für die technische "
-                "Umsetzung ableiten? Antworte natürlich und knapp."
-            )},
+            {
+                "role": "user",
+                "content": (
+                    "Ich möchte einen leisen lokalen Sprachassistenten bauen. "
+                    "Antwortzeit ist wichtiger als sehr lange Antworten."
+                ),
+            },
+            {
+                "role": "assistant",
+                "content": ("Dann sollten Modell und Sprachausgabe dauerhaft geladen bleiben."),
+            },
+            {
+                "role": "user",
+                "content": (
+                    "Welche zwei Prioritäten würdest du daraus für die technische "
+                    "Umsetzung ableiten? Antworte natürlich und knapp."
+                ),
+            },
         ],
     ),
     (
         "grimm",
-        [{"role": "user", "content": (
-            "Erzähle in etwa 140 Wörtern als ruhige Gute-Nacht-Geschichte das "
-            "bekannte Grimm-Märchen Die Sterntaler. Erfinde keine anderen Figuren."
-        )}],
+        [
+            {
+                "role": "user",
+                "content": (
+                    "Erzähle in etwa 140 Wörtern als ruhige Gute-Nacht-Geschichte das "
+                    "bekannte Grimm-Märchen Die Sterntaler. Erfinde keine anderen Figuren."
+                ),
+            }
+        ],
     ),
 )
 
@@ -140,7 +157,7 @@ class ResourceMonitor:
         while not self._stop.wait(self.interval):
             self._sample()
 
-    def __enter__(self) -> "ResourceMonitor":
+    def __enter__(self) -> ResourceMonitor:
         psutil.cpu_percent(interval=None)
         self._sample()
         self._thread = threading.Thread(target=self._run, daemon=True)
@@ -221,9 +238,8 @@ def run_prompt(
                     if not first_token_at:
                         first_token_at = time.perf_counter()
                     pieces.append(content)
-                    if (
-                        not first_sentence_at
-                        and re.search(r"[.!?](?:[\"'»)]*)?(?:\s|$)", "".join(pieces))
+                    if not first_sentence_at and re.search(
+                        r"[.!?](?:[\"'»)]*)?(?:\s|$)", "".join(pieces)
                     ):
                         first_sentence_at = time.perf_counter()
                 if event.get("done"):
@@ -259,7 +275,9 @@ def run_prompt(
     )
 
 
-def warm_model(model: str, context: int, num_gpu: int | None, timeout: float) -> tuple[float, ResourcePeak]:
+def warm_model(
+    model: str, context: int, num_gpu: int | None, timeout: float
+) -> tuple[float, ResourcePeak]:
     started = time.perf_counter()
     payload = {
         "model": model,
@@ -289,7 +307,8 @@ def model_info(model: str, timeout: float) -> dict[str, Any]:
         "model_info": {
             key: value
             for key, value in data.get("model_info", {}).items()
-            if key in {
+            if key
+            in {
                 "general.parameter_count",
                 "general.architecture",
                 "general.file_type",
@@ -318,6 +337,7 @@ def unload(model: str, timeout: float) -> None:
 def aggregate(runs: list[RunResult]) -> dict[str, float]:
     def mean(name: str) -> float:
         return round(statistics.mean(float(getattr(run, name)) for run in runs), 2)
+
     return {
         "ttft_ms": mean("ttft_ms"),
         "first_sentence_ms": mean("first_sentence_ms"),
@@ -325,15 +345,9 @@ def aggregate(runs: list[RunResult]) -> dict[str, float]:
         "tokens_per_second": mean("tokens_per_second"),
         "prompt_tokens_per_second": mean("prompt_tokens_per_second"),
         "peak_gpu_vram_mb": round(max(run.resources.gpu_vram_mb for run in runs), 1),
-        "peak_gpu_load_percent": round(
-            max(run.resources.gpu_load_percent for run in runs), 1
-        ),
-        "peak_system_ram_used_mb": round(
-            max(run.resources.system_ram_used_mb for run in runs), 1
-        ),
-        "peak_ollama_rss_mb": round(
-            max(run.resources.ollama_rss_mb for run in runs), 1
-        ),
+        "peak_gpu_load_percent": round(max(run.resources.gpu_load_percent for run in runs), 1),
+        "peak_system_ram_used_mb": round(max(run.resources.system_ram_used_mb for run in runs), 1),
+        "peak_ollama_rss_mb": round(max(run.resources.ollama_rss_mb for run in runs), 1),
         "peak_cpu_percent": round(max(run.resources.cpu_percent for run in runs), 1),
     }
 
@@ -363,8 +377,7 @@ def main() -> None:
 
     for model in args.models:
         print(f"Benchmark: {model}", flush=True)
-        cold_load_ms, warm_resources = warm_model(
-            model, args.context, args.num_gpu, args.timeout)
+        cold_load_ms, warm_resources = warm_model(model, args.context, args.num_gpu, args.timeout)
         runs: list[RunResult] = []
         for name, messages in DEFAULT_PROMPTS:
             print(f"  {name}", flush=True)

@@ -1,10 +1,13 @@
 from __future__ import annotations
 
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 
 class DesktopCamera:
-    def __init__(self, device: int = 0, *, capture_factory: Callable[[int], Any] | None = None) -> None:
+    def __init__(
+        self, device: int = 0, *, capture_factory: Callable[[int], Any] | None = None
+    ) -> None:
         if capture_factory:
             self.capture = capture_factory(device)
         else:
@@ -25,7 +28,7 @@ class DesktopCamera:
     def close(self) -> None:
         self.capture.release()
 
-    def __enter__(self) -> "DesktopCamera":
+    def __enter__(self) -> DesktopCamera:
         return self
 
     def __exit__(self, *_args: Any) -> None:

@@ -9,13 +9,14 @@ python3 -m venv .venv
 . .venv/bin/activate
 pip install -r requirements.txt
 ollama pull gemma4:e2b
-# Optional für den späteren Desktop-Agenten:
-ollama pull maternion/mai-ui:2b
 ollama pull nomic-embed-text
 cp .env.example .env
 ```
 
 Für Kamera/PDF optional: `pip install -r requirements-optional.txt`. Auf einem Desktop kann statt `opencv-python-headless` das GUI-Paket `opencv-python` verwendet werden, aber nie beide parallel.
+
+Für den Windows-Begleiter mit serverseitiger Text- und Bildverarbeitung gilt die
+separate Anleitung [DESKTOP_SERVER_LINK.md](DESKTOP_SERVER_LINK.md).
 
 ## PostgreSQL und pgvector
 

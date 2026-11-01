@@ -1,4 +1,4 @@
-"""Optional desktop webcam client. It never controls Wake-on-LAN or shutdown."""
+"""Desktop webcam presence and EVA companion; neither controls PC power."""
 
 from .eva_client import EVAClient
 

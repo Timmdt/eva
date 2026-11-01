@@ -18,7 +18,9 @@ def _enabled(name: str, default: bool = False) -> bool:
 
 
 def main() -> None:
-    logging.basicConfig(level=getattr(logging, os.getenv("EVA_LOG_LEVEL", "INFO").upper(), logging.INFO))
+    logging.basicConfig(
+        level=getattr(logging, os.getenv("EVA_LOG_LEVEL", "INFO").upper(), logging.INFO)
+    )
     if not _enabled("EVA_DESKTOP_AGENT_ENABLED"):
         print("Desktop Agent ist deaktiviert (EVA_DESKTOP_AGENT_ENABLED=false).")
         return
@@ -26,8 +28,7 @@ def main() -> None:
     store = Path(os.getenv("EVA_DESKTOP_FACE_STORE", "data/faces.json"))
     detector = DeskPresenceDetector()
     identity = DesktopIdentity(store, threshold=float(os.getenv("EVA_FACE_THRESHOLD", "0.82")))
-    client = EVAClient(
-        os.getenv("EVA_DESKTOP_EVA_URL", ""), os.getenv("EVA_PRESENCE_TOKEN", ""))
+    client = EVAClient(os.getenv("EVA_DESKTOP_EVA_URL", ""), os.getenv("EVA_PRESENCE_TOKEN", ""))
     last_payload: dict[str, object] | None = None
     last_sent = 0.0
     with DesktopCamera(int(os.getenv("EVA_DESKTOP_CAMERA", "0"))) as camera:

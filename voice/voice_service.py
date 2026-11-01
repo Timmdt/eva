@@ -6,7 +6,6 @@ import logging
 import os
 import subprocess
 import threading
-import time
 from pathlib import Path
 from typing import Any
 
@@ -14,7 +13,6 @@ from .audio_player import AudioPlayer
 from .config import VoiceConfig
 from .metrics import VoiceMetrics, nvidia_memory_mb
 from .text_chunker import SpeechChunker
-
 
 logger = logging.getLogger(__name__)
 
@@ -81,20 +79,35 @@ class VoiceService:
             return False
         logger.info("Voice: loading")
         command = [
-            str(self.config.python), "-m", "voice.xtts_worker",
-            "--model", self.config.model,
-            "--language", self.config.language,
-            "--device", self.config.device,
-            "--cache-dir", str(self.config.cache_dir),
-            "--stream-chunk-size", str(self.config.stream_chunk_size),
-            "--temperature", str(self.config.temperature),
-            "--repetition-penalty", str(self.config.repetition_penalty),
-            "--top-k", str(self.config.top_k),
-            "--top-p", str(self.config.top_p),
-            "--speed", str(self.config.speed),
-            "--seed", str(self.config.seed),
-            "--gpt-cond-len", str(self.config.gpt_cond_len),
-            "--gpt-cond-chunk-len", str(self.config.gpt_cond_chunk_len),
+            str(self.config.python),
+            "-m",
+            "voice.xtts_worker",
+            "--model",
+            self.config.model,
+            "--language",
+            self.config.language,
+            "--device",
+            self.config.device,
+            "--cache-dir",
+            str(self.config.cache_dir),
+            "--stream-chunk-size",
+            str(self.config.stream_chunk_size),
+            "--temperature",
+            str(self.config.temperature),
+            "--repetition-penalty",
+            str(self.config.repetition_penalty),
+            "--top-k",
+            str(self.config.top_k),
+            "--top-p",
+            str(self.config.top_p),
+            "--speed",
+            str(self.config.speed),
+            "--seed",
+            str(self.config.seed),
+            "--gpt-cond-len",
+            str(self.config.gpt_cond_len),
+            "--gpt-cond-chunk-len",
+            str(self.config.gpt_cond_chunk_len),
         ]
         for reference in self.config.references:
             command.extend(["--reference", str(reference)])
@@ -119,8 +132,12 @@ class VoiceService:
             text=True,
             bufsize=1,
         )
-        self._reader = threading.Thread(target=self._read_events, name="eva-voice-events", daemon=True)
-        self._stderr_reader = threading.Thread(target=self._read_stderr, name="eva-voice-log", daemon=True)
+        self._reader = threading.Thread(
+            target=self._read_events, name="eva-voice-events", daemon=True
+        )
+        self._stderr_reader = threading.Thread(
+            target=self._read_stderr, name="eva-voice-log", daemon=True
+        )
         self._reader.start()
         self._stderr_reader.start()
         self.audio.start()
@@ -197,7 +214,10 @@ class VoiceService:
                     self.audio.finish(self._active_id)
                     self._active_id = None
                     if self.config.performance_debug:
-                        logger.info("EVA VOICE PERFORMANCE %s", json.dumps(self.metrics.snapshot(), sort_keys=True))
+                        logger.info(
+                            "EVA VOICE PERFORMANCE %s",
+                            json.dumps(self.metrics.snapshot(), sort_keys=True),
+                        )
             elif kind == "error":
                 self._error = str(event.get("error", "XTTS-Fehler"))
                 logger.error("Voice: %s", self._error)

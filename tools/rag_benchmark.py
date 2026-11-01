@@ -25,8 +25,7 @@ def main() -> None:
     embedding = retriever.embedding_client.embed(args.query)
     embedding_ms = milliseconds(started)
     started = time.perf_counter()
-    results = retriever.store.search(embedding, top_k=args.top_k,
-                                     threshold=retriever.threshold)
+    results = retriever.store.search(embedding, top_k=args.top_k, threshold=retriever.threshold)
     database_ms = milliseconds(started)
     started = time.perf_counter()
     _context = "\n---\n".join(item["content"] for item in results)

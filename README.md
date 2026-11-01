@@ -6,6 +6,8 @@ Lokale XTTS-v2-Sprachausgabe und Streaming: [docs/VOICE.md](docs/VOICE.md)
 
 Lokaler Browser-Chat mit Sprachausgabe: [docs/WEB_UI.md](docs/WEB_UI.md)
 
+EVA Desktop Agent für deinen separaten Windows-PC: [Gothic-Anime-Figur an der Taskleiste, Chat, Hauptmenü und optionale Bildschirmansicht](docs/DESKTOP_COMPANION.md). Windows-Paket bauen: `python3 -m tools.package_desktop`.
+
 EVA ist ein modularer, lokal betriebener Python-Assistent mit Ollama, semantischem Intent-Routing, Memory, Websuche und PostgreSQL/pgvector-RAG. Antworten werden im Terminal oder Browser gestreamt und danach vollständig in History/Memory gespeichert.
 
 Der Sentry-PC ist bewusst ein getrenntes Projekt und nicht Bestandteil dieses Repositories. EVA stellt dafür ausschließlich die lokalen, token-geschützten Gegenstellen `/health`, `/presence` und `/shutdown` bereit. Ein kopierfertiger Implementierungsauftrag liegt in `docs/SENTRY_PC_PROMPT.md`. Der optionale Desktop-Agent ergänzt Schreibtisch-Präsenz; Gesichtserkennung ist ausdrücklich kein Authentifizierungsfaktor für kritische Aktionen.
@@ -18,8 +20,9 @@ python3 -m venv .venv
 pip install -r requirements.txt
 cp .env.example .env
 ollama pull gemma4:e2b
-# Optional für den späteren Desktop-Agenten:
-ollama pull maternion/mai-ui:2b
+# Optional für EVAs Desktop-Chat mit Bildschirmansicht:
+ollama pull qwen3-vl:2b-instruct-q4_K_M
+ollama pull qwen3:4b-instruct-2507-q4_K_M
 ollama pull nomic-embed-text
 python3 main.py
 ```
@@ -40,3 +43,18 @@ python3 -m unittest discover -s tests -v
 ```
 
 Weitere Details: [Entwicklerleitfaden](docs/ENTWICKLERLEITFADEN.md), [Architektur](docs/ARCHITECTURE.md), [Weboberfläche](docs/WEB_UI.md), [Voice](docs/VOICE.md), [LLM-/TTS-Benchmark](docs/LLM_TTS_BENCHMARK.md), [RAG](docs/RAG.md), [Sentry-PC-Prompt](docs/SENTRY_PC_PROMPT.md), [Visual Cortex](docs/VISUAL_CORTEX.md), [Präsenz-Automation](docs/PRESENCE_AUTOMATION.md), [Installation](docs/INSTALL.md).
+
+## Code prüfen
+
+Für Entwicklung und vollständige Tests einschließlich Qt und Bildwerkzeugen:
+
+```bash
+pip install -r requirements-dev.txt
+ruff check .
+ruff format --check .
+QT_QPA_PLATFORM=offscreen python3 -m unittest discover -s tests -v
+```
+
+Die zusätzlichen Entwicklungsabhängigkeiten werden für den normalen EVA-Serverbetrieb
+nicht benötigt. Details zur Bereinigung und zur Sicherung entfernter Dateien:
+[PROJECT_CLEANUP.md](docs/PROJECT_CLEANUP.md).

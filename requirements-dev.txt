@@ -1,0 +1,5 @@
+# Full local checks, including the optional desktop GUI and image tools.
+-r requirements.txt
+-r requirements-desktop.txt
+Pillow>=10
+ruff==0.17.3

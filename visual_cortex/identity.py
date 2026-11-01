@@ -3,8 +3,9 @@ from __future__ import annotations
 import json
 import math
 import re
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 
 def _normalize(values: list[float]) -> list[float]:
@@ -27,20 +28,24 @@ def local_face_embedding(frame: Any) -> list[float]:
     except ImportError as exc:
         raise RuntimeError("Lokale Gesichtserkennung benötigt OpenCV.") from exc
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    cascade = cv2.CascadeClassifier(
-        cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
+    cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
     faces = cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5)
     if len(faces) == 0:
         raise ValueError("Kein Gesicht erkannt.")
     x, y, width, height = max(faces, key=lambda item: item[2] * item[3])
-    face = cv2.resize(gray[y:y + height, x:x + width], (32, 32))
+    face = cv2.resize(gray[y : y + height, x : x + width], (32, 32))
     equalized = cv2.equalizeHist(face)
     return _normalize([float(value) / 255.0 for row in equalized.tolist() for value in row])
 
 
 class IdentityStore:
-    def __init__(self, path: Path = Path("data/faces.json"), *, threshold: float = 0.82,
-                 extractor: Callable[[Any], list[float]] = local_face_embedding) -> None:
+    def __init__(
+        self,
+        path: Path = Path("data/faces.json"),
+        *,
+        threshold: float = 0.82,
+        extractor: Callable[[Any], list[float]] = local_face_embedding,
+    ) -> None:
         self.path, self.threshold, self.extractor = path, threshold, extractor
         self.identities: dict[str, list[list[float]]] = {}
         self.load()
@@ -50,8 +55,11 @@ class IdentityStore:
             return
         data = json.loads(self.path.read_text(encoding="utf-8"))
         if isinstance(data, dict):
-            self.identities = {str(name): [[float(v) for v in vector] for vector in vectors]
-                               for name, vectors in data.items() if isinstance(vectors, list)}
+            self.identities = {
+                str(name): [[float(v) for v in vector] for vector in vectors]
+                for name, vectors in data.items()
+                if isinstance(vectors, list)
+            }
 
     def save(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)

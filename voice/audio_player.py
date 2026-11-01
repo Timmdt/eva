@@ -7,10 +7,9 @@ import subprocess
 import threading
 import wave
 from array import array
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable
-
 
 logger = logging.getLogger(__name__)
 
@@ -151,6 +150,7 @@ class AudioPlayer:
         if destination.suffix.lower() != ".mp3":
             raise ValueError("EVA_TTS_OUTPUT_FILE muss auf .wav oder .mp3 enden.")
         import lameenc
+
         encoder = lameenc.Encoder()
         encoder.set_bit_rate(128)
         encoder.set_in_sample_rate(self._sample_rate)

@@ -5,12 +5,12 @@ import logging
 import os
 import queue
 import threading
+from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime, time, timezone
+from datetime import UTC, datetime, time
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
-
 
 logger = logging.getLogger(__name__)
 
@@ -54,23 +54,21 @@ class PresenceAutomationConfig:
     max_pending_events: int = 50
 
     @classmethod
-    def from_env(cls) -> "PresenceAutomationConfig":
+    def from_env(cls) -> PresenceAutomationConfig:
         return cls(
             enabled=_env_bool("EVA_PRESENCE_AUTOMATION_ENABLED", False),
             timezone_name=os.getenv("EVA_TIMEZONE", "Europe/Berlin").strip(),
             weather_location=os.getenv("EVA_WEATHER_LOCATION", "").strip(),
-            return_briefing_after=_env_seconds(
-                "EVA_PRESENCE_RETURN_BRIEFING_AFTER", 900.0),
-            greeting_cooldown=_env_seconds(
-                "EVA_PRESENCE_GREETING_COOLDOWN", 14_400.0),
-            morning_start=_parse_time(
-                os.getenv("EVA_MORNING_GREETING_START", "05:00"), time(5, 0)),
-            morning_end=_parse_time(
-                os.getenv("EVA_MORNING_GREETING_END", "11:30"), time(11, 30)),
-            state_path=Path(os.getenv(
-                "EVA_PRESENCE_AUTOMATION_STATE_FILE",
-                "data/presence_automation.json",
-            )),
+            return_briefing_after=_env_seconds("EVA_PRESENCE_RETURN_BRIEFING_AFTER", 900.0),
+            greeting_cooldown=_env_seconds("EVA_PRESENCE_GREETING_COOLDOWN", 14_400.0),
+            morning_start=_parse_time(os.getenv("EVA_MORNING_GREETING_START", "05:00"), time(5, 0)),
+            morning_end=_parse_time(os.getenv("EVA_MORNING_GREETING_END", "11:30"), time(11, 30)),
+            state_path=Path(
+                os.getenv(
+                    "EVA_PRESENCE_AUTOMATION_STATE_FILE",
+                    "data/presence_automation.json",
+                )
+            ),
         )
 
 
@@ -94,7 +92,7 @@ class PresenceAutomation:
         self.config = config
         self.weather_provider = weather_provider
         self.announcer = announcer
-        self.clock = clock or (lambda: datetime.now(timezone.utc))
+        self.clock = clock or (lambda: datetime.now(UTC))
         try:
             self.timezone = ZoneInfo(config.timezone_name)
         except ZoneInfoNotFoundError:
@@ -161,7 +159,7 @@ class PresenceAutomation:
     def _now(self) -> datetime:
         current = self.clock()
         if current.tzinfo is None:
-            current = current.replace(tzinfo=timezone.utc)
+            current = current.replace(tzinfo=UTC)
         return current.astimezone(self.timezone)
 
     @staticmethod
@@ -173,7 +171,7 @@ class PresenceAutomation:
         except ValueError:
             return None
         if parsed.tzinfo is None:
-            parsed = parsed.replace(tzinfo=timezone.utc)
+            parsed = parsed.replace(tzinfo=UTC)
         return parsed
 
     def _is_morning(self, current: datetime) -> bool:
@@ -205,7 +203,8 @@ class PresenceAutomation:
         if previous is None:
             return True
         return (current - previous.astimezone(self.timezone)).total_seconds() >= (
-            self.config.greeting_cooldown)
+            self.config.greeting_cooldown
+        )
 
     def submit_report(self, report: dict[str, Any]) -> None:
         if not self.config.enabled:
@@ -234,12 +233,14 @@ class PresenceAutomation:
             if not self._state.get("away_since"):
                 return False
             events = list(self._state.get("pending_events", []))
-            events.append({
-                "summary": summary[:300],
-                "category": str(category)[:50],
-                "created_at": self._now().isoformat(),
-            })
-            self._state["pending_events"] = events[-self.config.max_pending_events:]
+            events.append(
+                {
+                    "summary": summary[:300],
+                    "category": str(category)[:50],
+                    "created_at": self._now().isoformat(),
+                }
+            )
+            self._state["pending_events"] = events[-self.config.max_pending_events :]
             self._save_state_locked()
         return True
 
@@ -297,8 +298,7 @@ class PresenceAutomation:
                 self._state["identity"] = None
 
             should_brief = (
-                away_duration is not None
-                and away_duration >= self.config.return_briefing_after
+                away_duration is not None and away_duration >= self.config.return_briefing_after
             )
             should_announce = bool(morning or initial_greeting or should_brief)
             if should_announce:
@@ -320,9 +320,7 @@ class PresenceAutomation:
             parts.append(f"Hallo, {identity}.")
 
         if should_brief and away_duration is not None:
-            parts.append(
-                f"Du warst ungefähr {self._format_duration(away_duration)} weg."
-            )
+            parts.append(f"Du warst ungefähr {self._format_duration(away_duration)} weg.")
             summaries = [
                 str(event.get("summary", "")).strip()
                 for event in events
@@ -331,9 +329,7 @@ class PresenceAutomation:
             if summaries:
                 parts.append("Währenddessen: " + "; ".join(summaries[:3]) + ".")
                 if len(summaries) > 3:
-                    parts.append(
-                        f"Außerdem gibt es {len(summaries) - 3} weitere Meldungen."
-                    )
+                    parts.append(f"Außerdem gibt es {len(summaries) - 3} weitere Meldungen.")
             else:
                 parts.append("Währenddessen wurden keine besonderen Ereignisse erfasst.")
 

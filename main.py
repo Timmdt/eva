@@ -15,10 +15,7 @@ load_env_file(ROOT / ".env")
 
 log_level_name = os.getenv("EVA_LOG_LEVEL", "INFO").strip().upper()
 log_level = getattr(logging, log_level_name, logging.INFO)
-logging.basicConfig(
-    level=log_level,
-    format='%(levelname)s: %(message)s'
-)
+logging.basicConfig(level=log_level, format="%(levelname)s: %(message)s")
 
 # Bibliotheks-Transportdetails dürfen nicht zwischen EVAs Stream-Chunks landen.
 if os.getenv("EVA_HTTP_DEBUG", "false").lower() not in {"1", "true", "yes", "on"}:
@@ -36,47 +33,39 @@ def main() -> None:
 
     if os.getenv("EVA_HEALTH_ENABLED", "false").lower() in {"1", "true", "yes", "on"}:
         from interfaces.health_server import start_in_thread
+
         start_in_thread(
             eva,
             os.getenv("EVA_HEALTH_HOST", "127.0.0.1"),
             int(os.getenv("EVA_HEALTH_PORT", "8765")),
         )
 
-    print(
-        f"--- {eva.name} initialisiert ---"
-    )
+    print(f"--- {eva.name} initialisiert ---")
 
     startup_text = eva.startup()
 
-    presence_greeting_enabled = os.getenv(
-        "EVA_PRESENCE_AUTOMATION_ENABLED", "false"
-    ).lower() in {"1", "true", "yes", "on"}
+    presence_greeting_enabled = os.getenv("EVA_PRESENCE_AUTOMATION_ENABLED", "false").lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
 
     if startup_text and not presence_greeting_enabled:
-        eva.speak(
-            startup_text
-        )
+        eva.speak(startup_text)
     elif startup_text:
-        logging.info(
-            "Startup-Begrüßung wartet auf eine erkannte Raum-Präsenz."
-        )
+        logging.info("Startup-Begrüßung wartet auf eine erkannte Raum-Präsenz.")
 
     try:
         while True:
-
-            user_input = input(
-                "Du: "
-            ).strip()
+            user_input = input("Du: ").strip()
 
             if user_input.lower() in {
                 "exit",
                 "shutdown",
                 "bye",
             }:
-                print(
-                    "Auf Wiedersehen!"
-                )
-                eva.shutdown()
+                print("Auf Wiedersehen!")
                 break
 
             if not user_input:
@@ -90,29 +79,10 @@ def main() -> None:
             if wrote:
                 print()
 
-    except KeyboardInterrupt:
-
-        print(
-            "\nBeendet."
-        )
-
+    except (KeyboardInterrupt, EOFError):
+        print("\nBeendet.")
+    finally:
         eva.shutdown()
-
-        try:
-            from memory.memory_engine import (
-                run_reflection_and_save
-            )
-        except ImportError:
-            run_reflection_and_save = None
-
-        if run_reflection_and_save:
-            try:
-                run_reflection_and_save()
-            except Exception as exc:
-                logging.exception(
-                    "Reflection konnte nicht ausgeführt werden: %s",
-                    exc,
-                )
 
 
 if __name__ == "__main__":

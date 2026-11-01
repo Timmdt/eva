@@ -81,7 +81,7 @@ class VoiceConfig:
     performance_debug: bool = False
 
     @classmethod
-    def from_env(cls) -> "VoiceConfig":
+    def from_env(cls) -> VoiceConfig:
         """Liest alle aktiven Voice-Werte aus den Umgebungsvariablen."""
         output = os.getenv("EVA_TTS_OUTPUT_FILE", "").strip()
         return cls(
@@ -112,9 +112,7 @@ class VoiceConfig:
             repetition_penalty=_env_float("EVA_TTS_REPETITION_PENALTY", 5.0, 1.0),
             top_k=_env_int("EVA_TTS_TOP_K", 50, 1),
             top_p=_env_float("EVA_TTS_TOP_P", 0.85, 0.01),
-            trim_trailing_artifacts=_env_bool(
-                "EVA_TTS_TRIM_TRAILING_ARTIFACTS", False
-            ),
+            trim_trailing_artifacts=_env_bool("EVA_TTS_TRIM_TRAILING_ARTIFACTS", False),
             speed=_env_float("EVA_TTS_SPEED", 0.98, 0.5),
             seed=_env_int("EVA_TTS_SEED", 42, 0),
             sentence_pause_ms=_env_int("EVA_TTS_SENTENCE_PAUSE_MS", 25, 0),
@@ -126,9 +124,9 @@ class VoiceConfig:
             output_file=Path(output).expanduser() if output else None,
             read_code=_env_bool("EVA_TTS_READ_CODE", False),
             read_urls=_env_bool("EVA_TTS_READ_URLS", False),
-            pronunciation_rules=Path(os.getenv(
-                "EVA_TTS_PRONUNCIATION_RULES", "voice/pronunciation_rules.json"
-            )),
+            pronunciation_rules=Path(
+                os.getenv("EVA_TTS_PRONUNCIATION_RULES", "voice/pronunciation_rules.json")
+            ),
             first_chunk_min_words=_env_int("EVA_TTS_FIRST_CHUNK_MIN_WORDS", 5, 1),
             first_chunk_target_words=_env_int("EVA_TTS_FIRST_CHUNK_TARGET_WORDS", 8, 1),
             chunk_min_words=_env_int("EVA_TTS_CHUNK_MIN_WORDS", 10, 1),
@@ -144,8 +142,9 @@ class VoiceConfig:
             ),
         )
 
-    def resolved(self, project_root: Path) -> "VoiceConfig":
+    def resolved(self, project_root: Path) -> VoiceConfig:
         """Löst relative Voice-Pfade gegen das Projektverzeichnis auf."""
+
         def local(path: Path) -> Path:
             return path if path.is_absolute() else project_root / path
 

@@ -2,16 +2,15 @@ from __future__ import annotations
 
 from typing import Any
 
-from .base_module import ModuleBase
 from memory.memory_engine import load_memory
+
+from .base_module import ModuleBase
 
 
 class StartupModule(ModuleBase):
     name = "StartupAdvisor"
     version = "0.1"
-    description = (
-        "Modul für den automatischen Start von EVA: Lernziele, Erinnerungen und langfristige Prioritäten."
-    )
+    description = "Modul für den automatischen Start von EVA: Lernziele, Erinnerungen und langfristige Prioritäten."
 
     def can_handle(self, message: str) -> bool:
         return False

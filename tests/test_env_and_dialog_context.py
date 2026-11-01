@@ -89,7 +89,6 @@ class DialogContextRegressionTest(unittest.TestCase):
         self.assertEqual(decision.action, "WEATHER")
         self.assertEqual(decision.location, "Berlin")
 
-
     def test_temperature_in_degrees_uses_weather_script(self):
         decision = IntentRouter("unused").route(
             "Kannst du schauen wieviel Grad es in Kissing aktuell ist?"
@@ -114,7 +113,6 @@ class DialogContextRegressionTest(unittest.TestCase):
             "Was sind eigentlich die beliebtesten Bücher aktuell?"
         )
         self.assertEqual(decision.action, "WEB_SEARCH")
-
 
     def test_none_decision_clears_old_tool_query(self):
         eva = EVA.__new__(EVA)
