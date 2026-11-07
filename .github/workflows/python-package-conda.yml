@@ -15,6 +15,14 @@ jobs:
       - name: Create Conda environment
         run: conda env create --file environment.yml
 
+      - name: Install project and desktop dependencies
+        run: |
+          conda run --name eva python -m pip install -r requirements-dev.txt
+          conda run --name eva python -m pip install -r requirements-desktop.txt
+
+      - name: Install lint and test tools
+        run: conda install --name eva flake8 pytest --yes
+
       - name: Install lint and test tools
         run: conda install --name eva flake8 pytest --yes
 
