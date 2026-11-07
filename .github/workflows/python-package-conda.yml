@@ -1,6 +1,8 @@
 name: Python Package using Conda
 
-on: [push]
+on:
+  push:
+  pull_request:
 
 jobs:
   build-linux:
@@ -9,27 +11,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Add conda to system path
-        run: echo "$CONDA/bin" >> "$GITHUB_PATH"
+      - uses: conda-incubator/setup-miniconda@v3
+        with:
+          activate-environment: eva
+          environment-file: environment.yml
+          auto-activate-base: false
 
-      - name: Create Conda environment
-        run: conda env create --file environment.yml
-
-      - name: Install project and desktop dependencies
-        run: |
-          conda run --name eva python -m pip install -r requirements-dev.txt
-          conda run --name eva python -m pip install -r requirements-desktop.txt
-
-      - name: Install lint and test tools
-        run: conda install --name eva flake8 pytest --yes
-
-      - name: Install lint and test tools
-        run: conda install --name eva flake8 pytest --yes
+      - name: Install desktop dependencies
+        run: pip install -r requirements-desktop.txt
 
       - name: Lint with flake8
         run: |
-          conda run --name eva flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
-          conda run --name eva flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+          flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
 
       - name: Test with pytest
-        run: conda run --name eva pytest
+        run: pytest
