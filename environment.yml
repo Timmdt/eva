@@ -3,6 +3,8 @@ channels:
   - conda-forge
   - defaults
 dependencies:
+  - python=3.x
+  - flake8
   - python=3.11
   - pip
   - pip:
