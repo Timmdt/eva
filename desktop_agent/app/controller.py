@@ -174,7 +174,6 @@ class Companion(QObject):
         self.compact.activateWindow()
         self.compact.view.input.setFocus()
         self.render()
-
     def open_main(self, section="Dashboard"):
         self.state.activity()
         self.main_window.select(section)

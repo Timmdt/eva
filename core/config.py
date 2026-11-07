@@ -77,7 +77,7 @@ EVA_CONFIG = {
     "modules": [
         "module.startup_module",
         "module.jarvis_module",
-        "module.test_module",
+        "module.systemtest_module",
         "module.web_search_module",
     ],
     "timezone": os.getenv("EVA_TIMEZONE", "Europe/Berlin"),
