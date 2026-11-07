@@ -6,7 +6,7 @@ from unittest.mock import patch
 from core.eva import EVA
 from module.jarvis_module import JarvisModule
 from module.startup_module import StartupModule
-from module.test_module import TestModule
+from module.systemtest_module import SystemTestModule
 
 
 class EvaModuleTest(unittest.TestCase):
@@ -41,8 +41,8 @@ class EvaModuleTest(unittest.TestCase):
         self.assertIn("text", result)
         self.assertIn("Es ist jetzt", result["text"])
 
-    def test_module_test_module(self):
-        module = TestModule()
+    def test_systemtest_module(self):
+        module = SystemTestModule()
         ok, msg = module.run_test()
         self.assertTrue(ok, msg)
 

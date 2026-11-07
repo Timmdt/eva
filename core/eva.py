@@ -35,7 +35,7 @@ from .storytelling import local_story_response
 
 DEFAULT_MODULE_PATHS = [
     "module.jarvis_module",
-    "module.test_module",
+    "module.systemtest_module",
     "module.web_search_module",
 ]
 

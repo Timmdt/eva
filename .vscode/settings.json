@@ -8,5 +8,6 @@
         },
         "pip": true,
         "timeout": true
-    }
+    },
+    "python.REPL.enableREPLSmartSend": false
 }
